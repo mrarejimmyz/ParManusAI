@@ -94,19 +94,36 @@ class ManusActionExecutor:
 
         except Exception as e:
             logger.error(f"❌ Research action failed: {str(e)}")
-            return True  # Continue anyway
-
-    async def execute_extraction_action(self, step: str) -> bool:
+            return True  # Continue anyway    async def execute_extraction_action(self, step: str) -> bool:
         """Execute data extraction"""
         logger.info(f"📊 EXTRACTION ACTION: {step}")
-        # Always continue - extraction is handled by LLM reasoning
-        return True
+        # For extraction, check if we have search results
+        if self.last_search_results and self.last_search_results.get("success"):
+            logger.info("✅ Extraction successful - search results available")
+            return True
+        else:
+            logger.warning("⚠️ Extraction incomplete - no search results available")
+            return False
 
     async def execute_verification_action(self, step: str) -> bool:
         """Execute verification"""
         logger.info(f"✅ VERIFICATION ACTION: {step}")
-        # Always continue - verification is handled by LLM reasoning
-        return True
+        # For verification, check if we have sufficient data to verify
+        if self.last_search_results and self.last_search_results.get("results"):
+            num_results = len(self.last_search_results["results"])
+            if num_results >= 2:  # Need at least 2 sources for verification
+                logger.info(
+                    f"✅ Verification successful - {num_results} sources available"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"⚠️ Verification incomplete - only {num_results} source(s) available"
+                )
+                return False
+        else:
+            logger.warning("⚠️ Verification incomplete - no search results to verify")
+            return False
 
     async def execute_creation_action(self, step: str) -> bool:
         """Execute document creation using LLM"""
@@ -124,9 +141,7 @@ class ManusActionExecutor:
             # Create document prompt
             prompt = self._build_creation_prompt(user_message, context)
 
-            logger.info("🧠 Creating document with LLM...")
-
-            # Generate content
+            logger.info("🧠 Creating document with LLM...")  # Generate content
             response = await self.llm.ask(prompt)
             content = (
                 response.content if hasattr(response, "content") else str(response)
@@ -136,6 +151,9 @@ class ManusActionExecutor:
                 # Save document
                 filename = self._determine_filename(user_message)
                 filepath = self._save_document(filename, content)
+
+                # Record deliverable creation in todo list
+                await self._record_deliverable_creation(filename, filepath)
 
                 logger.info(f"✅ Document created: {filepath}")
                 print(
@@ -159,6 +177,24 @@ class ManusActionExecutor:
         """Execute default action"""
         logger.info(f"🔧 DEFAULT ACTION: {step}")
         return True
+
+    async def _record_deliverable_creation(self, filename: str, filepath: str) -> None:
+        """Record the creation of a deliverable in the todo list"""
+        try:
+            # Get reference to the agent's planning module to record deliverable
+            if hasattr(self.agent, "planning_module") and hasattr(
+                self.agent.planning_module, "todo_manager"
+            ):
+                await self.agent.planning_module.todo_manager.mark_deliverable_created(
+                    filename, filepath
+                )
+                logger.info(f"📝 Recorded deliverable creation: {filename}")
+            else:
+                logger.warning(
+                    "⚠️ Could not record deliverable - planning module not available"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to record deliverable creation: {e}")
 
     def _get_user_message(self) -> str:
         """Get the user's original request"""

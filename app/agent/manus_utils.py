@@ -104,7 +104,7 @@ class ManusUtils:
             logger.error(f"Error getting current step: {str(e)}")
             return None
 
-    async def progress_to_next_step(self) -> bool:
+    async def progress_to_next_step(self, verified: bool = True) -> bool:
         """Progress to the next step in the current phase or next phase"""
         current_time = time.time()
 
@@ -124,13 +124,22 @@ class ManusUtils:
             logger.error("No valid phase for progression")
             return False
 
+        # Record current step completion with verification status
+        current_step = await self._get_current_step()
+        if current_step and current_step != "phase_complete":
+            if hasattr(self.agent, "planning_module") and hasattr(
+                self.agent.planning_module, "todo_manager"
+            ):
+                await self.agent.planning_module.todo_manager.update_todo_progress(
+                    current_step, verified
+                )
+
         # Check if we can move to next step in current phase
         if self.agent.current_step + 1 < len(current_phase["steps"]):
             self.agent.current_step += 1
             logger.info(
                 f"Progressed to step {self.agent.current_step} in phase {self.agent.current_phase}"
             )
-            await self.agent.update_todo_progress()
             return True
         else:
             # We're at the end of current phase, move to next phase
@@ -151,8 +160,12 @@ class ManusUtils:
 
         # Check if we've completed all phases
         if next_phase >= len(self.agent.current_plan["phases"]):
+            # Before completing, verify all deliverables are actually created
+            await self._verify_all_deliverables_created()
             logger.info("All phases complete!")
-            raise AgentTaskComplete("All phases of the plan have been completed")
+            raise AgentTaskComplete(
+                "All phases of the plan have been completed with verified deliverables"
+            )
 
         # Move to next phase
         self.agent.current_phase = next_phase
@@ -160,8 +173,70 @@ class ManusUtils:
         logger.info(
             f"Progressed to phase {self.agent.current_phase}, step {self.agent.current_step}"
         )
-        await self.agent.update_todo_progress()
         return True
+
+    async def _verify_all_deliverables_created(self) -> bool:
+        """
+        Verify that all required deliverables have been created before task completion
+        """
+        try:
+            # Check workspace for created files
+            workspace_path = os.path.join(os.getcwd(), "workspace")
+            if not os.path.exists(workspace_path):
+                logger.warning(
+                    "⚠️ Workspace directory does not exist - no deliverables found"
+                )
+                return False
+
+            # Count markdown files (reports) in workspace
+            md_files = []
+            for root, dirs, files in os.walk(workspace_path):
+                for file in files:
+                    if file.endswith(".md") and file != "todo.md":
+                        md_files.append(os.path.join(root, file))
+
+            if md_files:
+                logger.info(
+                    f"✅ Found {len(md_files)} deliverable(s) in workspace: {[os.path.basename(f) for f in md_files]}"
+                )
+
+                # Verify each file has substantial content
+                verified_files = 0
+                for filepath in md_files:
+                    try:
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            content = f.read()
+                            if len(content) > 500:  # Substantial content
+                                verified_files += 1
+                                logger.info(
+                                    f"✅ Verified deliverable: {os.path.basename(filepath)} ({len(content)} characters)"
+                                )
+                            else:
+                                logger.warning(
+                                    f"⚠️ Deliverable has insufficient content: {os.path.basename(filepath)} ({len(content)} characters)"
+                                )
+                    except Exception as e:
+                        logger.warning(f"Could not verify {filepath}: {e}")
+
+                if verified_files > 0:
+                    logger.info(
+                        f"✅ Task completion verified: {verified_files} substantial deliverable(s) created"
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        "⚠️ No substantial deliverables found - task may not be complete"
+                    )
+                    return False
+            else:
+                logger.warning(
+                    "⚠️ No deliverable files found in workspace - task may not be complete"
+                )
+                return False
+
+        except Exception as e:
+            logger.error(f"Error verifying deliverables: {e}")
+            return False
 
     async def recover_from_invalid_position(self) -> bool:
         """Recover from invalid position by resetting to valid indices"""

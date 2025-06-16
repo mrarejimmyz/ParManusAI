@@ -62,14 +62,15 @@ class PlanAnalyzer:
                     "success_criteria": "How to know this phase is complete",
                     "estimated_time": "time for this phase"
                 }}
-            ],
-            "final_deliverable": "What the user will receive at the end",
+            ],            "final_deliverable": "What the user will receive at the end",
             "success_criteria": "How to know the entire task is complete"
         }}
         """
 
         try:
-            response = await self.llm.ask(plan_prompt)
+            # Format the prompt as a message for the LLM
+            messages = [{"role": "user", "content": plan_prompt}]
+            response = await self.llm.ask(messages)
 
             # Parse LLM response - try multiple JSON extraction methods
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
@@ -88,13 +89,18 @@ class PlanAnalyzer:
             if json_text:
                 try:
                     plan = json.loads(json_text)
-                    plan["created_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                    # Ensure plan is a dictionary before assigning
+                    if isinstance(plan, dict):
+                        plan["created_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
-                    logger.info(
-                        f"🧠 LLM created plan with {len(plan.get('phases', []))} phases"
-                    )
+                        logger.info(
+                            f"🧠 LLM created plan with {len(plan.get('phases', []))} phases"
+                        )
 
-                    return plan
+                        return plan
+                    else:
+                        logger.warning(f"LLM returned non-dict plan: {type(plan)}")
+                        return self._create_fallback_plan(user_request)
 
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse LLM plan JSON: {e}")

@@ -53,10 +53,11 @@ class SearchStrategyAnalyzer:
                 "target_url": "https://example.com (only if direct website access detected)",
                 "priority_sources": ["web", "news", "knowledge"],
                 "content_focus": "summary|detailed"
-            }}
-            """
+            }}            """
 
-            response = await self.llm.ask(prompt)
+            # Format the prompt as a message for the LLM
+            messages = [{"role": "user", "content": prompt}]
+            response = await self.llm.ask(messages)
 
             # Parse LLM response - try multiple JSON extraction methods
             json_match = re.search(r"\{.*\}", response, re.DOTALL)

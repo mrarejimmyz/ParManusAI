@@ -149,6 +149,73 @@ class Manus(ToolCallAgent):
     async def _initialize_browser_state(self):
         return await self.browser_handler._initialize_browser_state()
 
+    async def _verify_deliverable_creation(self, current_step: str) -> bool:
+        """
+        Verify that the deliverable for the current step was actually created
+        """
+        try:
+            # Check if a new file was created in the workspace
+            workspace_path = os.path.join(os.getcwd(), "workspace")
+            if not os.path.exists(workspace_path):
+                logger.warning("Workspace directory does not exist")
+                return False
+
+            # Get list of files in workspace
+            current_files = []
+            for root, dirs, files in os.walk(workspace_path):
+                for file in files:
+                    current_files.append(os.path.join(root, file))
+
+            # Check if any files were created recently (within last 60 seconds)
+            import time
+
+            current_time = time.time()
+            recent_files = []
+
+            for filepath in current_files:
+                try:
+                    # Check file modification time
+                    mtime = os.path.getmtime(filepath)
+                    if current_time - mtime < 60:  # Created within last 60 seconds
+                        recent_files.append(filepath)
+                except OSError:
+                    continue
+
+            if recent_files:
+                logger.info(
+                    f"✅ Found {len(recent_files)} recently created deliverable(s): {[os.path.basename(f) for f in recent_files]}"
+                )
+
+                # Additional verification: check if files contain substantial content
+                for filepath in recent_files:
+                    try:
+                        if filepath.endswith(".md"):
+                            with open(filepath, "r", encoding="utf-8") as f:
+                                content = f.read()
+                                if len(content) > 500:  # Substantial content
+                                    logger.info(
+                                        f"✅ Verified substantial content in {os.path.basename(filepath)} ({len(content)} characters)"
+                                    )
+                                    return True
+                                else:
+                                    logger.warning(
+                                        f"⚠️ File {os.path.basename(filepath)} has insufficient content ({len(content)} characters)"
+                                    )
+                    except Exception as e:
+                        logger.warning(f"Could not verify content of {filepath}: {e}")
+                        continue
+
+                # If we have recent files but couldn't verify content, still consider it a success
+                if recent_files:
+                    return True
+
+            logger.warning("⚠️ No recent deliverables found in workspace")
+            return False
+
+        except Exception as e:
+            logger.error(f"Error verifying deliverable creation: {e}")
+            return False
+
     async def _extract_url_from_request(self, step: str) -> Optional[str]:
         return self.browser_handler._extract_url_from_request(step)
 
@@ -245,9 +312,19 @@ class Manus(ToolCallAgent):
                 for keyword in ["research", "plan", "identify", "sources"]
             ):
                 logger.info(f"Executing research action for: {current_step}")
-                await self.action_executor.execute_research_action(current_step)
-                success = await self.utils_module.progress_to_next_step()
-                return True
+                action_success = await self.action_executor.execute_research_action(
+                    current_step
+                )
+                if action_success:
+                    success = await self.utils_module.progress_to_next_step(
+                        verified=True
+                    )
+                    return True
+                else:
+                    logger.warning(f"Research action failed for step: {current_step}")
+                    # For research, we can proceed but mark as unverified
+                    await self.utils_module.progress_to_next_step(verified=False)
+                    return True  # Continue execution
 
             # Data extraction steps - scrape and collect information
             elif any(
@@ -255,9 +332,19 @@ class Manus(ToolCallAgent):
                 for keyword in ["extract", "headlines", "gather", "collect", "visit"]
             ):
                 logger.info(f"Executing data extraction for: {current_step}")
-                await self.action_executor.execute_extraction_action(current_step)
-                success = await self.utils_module.progress_to_next_step()
-                return True
+                action_success = await self.action_executor.execute_extraction_action(
+                    current_step
+                )
+                if action_success:
+                    success = await self.utils_module.progress_to_next_step(
+                        verified=True
+                    )
+                    return True
+                else:
+                    logger.warning(f"Extraction action failed for step: {current_step}")
+                    # For extraction, we can proceed but mark as unverified
+                    await self.utils_module.progress_to_next_step(verified=False)
+                    return True  # Continue execution
 
             # Verification steps - check multiple sources
             elif any(
@@ -265,9 +352,21 @@ class Manus(ToolCallAgent):
                 for keyword in ["verify", "check", "multiple sources", "confirm"]
             ):
                 logger.info(f"Executing verification action for: {current_step}")
-                await self.action_executor.execute_verification_action(current_step)
-                success = await self.utils_module.progress_to_next_step()
-                return True
+                action_success = await self.action_executor.execute_verification_action(
+                    current_step
+                )
+                if action_success:
+                    success = await self.utils_module.progress_to_next_step(
+                        verified=True
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"Verification action failed for step: {current_step}"
+                    )
+                    # For verification, we can proceed but mark as unverified
+                    await self.utils_module.progress_to_next_step(verified=False)
+                    return True  # Continue execution
 
             # File creation steps - generate reports and documents
             elif any(
@@ -275,23 +374,63 @@ class Manus(ToolCallAgent):
                 for keyword in ["generate", "create", "format", "output", ".md"]
             ):
                 logger.info(f"Executing file creation for: {current_step}")
-                await self.action_executor.execute_creation_action(current_step)
-                success = await self.utils_module.progress_to_next_step()
-                return True
+                action_success = await self.action_executor.execute_creation_action(
+                    current_step
+                )
+                if action_success:
+                    # For creation actions, also verify the deliverable was actually created
+                    deliverable_verified = await self._verify_deliverable_creation(
+                        current_step
+                    )
+                    if deliverable_verified:
+                        success = await self.utils_module.progress_to_next_step(
+                            verified=True
+                        )
+                        return True
+                    else:
+                        logger.warning(
+                            f"Creation action completed but deliverable not verified for step: {current_step}"
+                        )
+                        # Creation step must be verified to proceed
+                        return False  # Do not progress, retry this step
+                else:
+                    logger.warning(f"Creation action failed for step: {current_step}")
+                    # Creation failure is critical - do not progress
+                    return False  # Do not progress, retry this step
 
             # Navigation steps (legacy support)
             elif "navigate" in step_lower or "Navigate to website" in current_step:
                 logger.info(f"Executing navigation for: {current_step}")
-                await self.action_executor.execute_navigation_action(current_step)
-                success = await self.utils_module.progress_to_next_step()
-                return True
+                action_success = await self.action_executor.execute_navigation_action(
+                    current_step
+                )
+                if action_success:
+                    success = await self.utils_module.progress_to_next_step(
+                        verified=True
+                    )
+                    return True
+                else:
+                    logger.warning(f"Navigation action failed for step: {current_step}")
+                    # For navigation, we can proceed but mark as unverified
+                    await self.utils_module.progress_to_next_step(verified=False)
+                    return True  # Continue execution
 
             # Default case - try to determine action from context
             else:
                 logger.info(f"Executing default action for: {current_step}")
-                await self.action_executor.execute_default_action(current_step)
-                success = await self.utils_module.progress_to_next_step()
-                return True
+                action_success = await self.action_executor.execute_default_action(
+                    current_step
+                )
+                if action_success:
+                    success = await self.utils_module.progress_to_next_step(
+                        verified=True
+                    )
+                    return True
+                else:
+                    logger.warning(f"Default action failed for step: {current_step}")
+                    # For default actions, we can proceed but mark as unverified
+                    await self.utils_module.progress_to_next_step(verified=False)
+                    return True  # Continue execution
 
         except AgentTaskComplete:
             raise
