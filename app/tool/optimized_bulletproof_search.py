@@ -1,12 +1,13 @@
 """
 Optimized Bulletproof Search Implementation
-Focused on topic relevance and content quality filtering
+Fully dynamic search using real search engines - no hardcoded URLs!
 """
 
+import json
+import re
 from typing import Dict, List, Optional
 from urllib.parse import quote
 
-import feedparser
 import requests
 
 from app.logger import logger
@@ -31,77 +32,56 @@ class OptimizedBulletproofSearch:
                 "Connection": "keep-alive",
             }
         )
-        
-        # Dynamic news sources by region/topic
-        self.news_sources = {
-            "global": [
-                ("http://feeds.bbci.co.uk/news/rss.xml", "BBC News"),
-                ("http://feeds.bbci.co.uk/news/world/rss.xml", "BBC World News"),
-                ("https://rss.cnn.com/rss/edition.rss", "CNN International"),
-            ],
-            "asia": [
-                ("http://feeds.bbci.co.uk/news/world/asia/rss.xml", "BBC Asia"),
-                ("https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "Times of India"),
-                ("http://english.alarabiya.net/en/rss.xml", "Al Arabiya English"),
-            ],
-            "nepal": [
-                ("https://kathmandupost.com/rss", "Kathmandu Post"),
-                ("https://myrepublica.nagariknetwork.com/rss/", "My Republica"),
-                ("https://thehimalayantimes.com/rss", "The Himalayan Times"),
-                ("http://feeds.bbci.co.uk/news/world/asia/rss.xml", "BBC Asia"),
-            ],
-            "india": [
-                ("https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "Times of India"),
-                ("https://www.hindustantimes.com/rss/topnews/rssfeed.xml", "Hindustan Times"),
-                ("https://indianexpress.com/print/front-page/feed/", "Indian Express"),
-                ("http://feeds.bbci.co.uk/news/world/asia/rss.xml", "BBC Asia"),
-            ],
-            "technology": [
-                ("https://feeds.arstechnica.com/arstechnica/index", "Ars Technica"),
-                ("https://www.wired.com/feed/rss", "Wired"),
-                ("https://techcrunch.com/feed/", "TechCrunch"),
-            ],
-            "business": [                ("https://feeds.bloomberg.com/markets/news.rss", "Bloomberg Markets"),
-                ("https://www.ft.com/rss/home", "Financial Times"),
-                ("https://www.reuters.com/business/finance", "Reuters Business"),
-            ]
-        }
+        # Dynamic search engines (no hardcoded URLs!)
+        self.search_engines = [
+            "duckduckgo",
+            "bing",
+            "wikipedia",
+            "google_news_search",  # Dynamic news search
+        ]
 
     async def perform_google_search(self, query: str) -> Dict:
         """
-        Optimized search with dynamic source selection based on query analysis
+        Fully dynamic search using multiple search engines - no hardcoded URLs!
         """
-        logger.info(f"🔍 Optimized bulletproof search for: {query}")
+        logger.info(f"🔍 Dynamic bulletproof search for: {query}")
 
         all_results = []
 
-        # 1. Analyze query to determine optimal sources
-        search_strategy = await self._analyze_query_and_select_sources(query)
-        logger.info(f"🧠 Search strategy: {search_strategy.get('approach', 'default')}")
+        # 1. Generate dynamic search queries based on user intent
+        search_queries = await self._generate_dynamic_search_queries(query)
+        logger.info(f"🧠 Generated {len(search_queries)} dynamic search queries")
 
-        # 2. DuckDuckGo instant answers (for factual content)
-        ddg_instant = self._search_duckduckgo_instant(query)
-        if ddg_instant:
-            all_results.extend(ddg_instant)
-            logger.info(f"✅ DuckDuckGo instant returned {len(ddg_instant)} results")
+        # 2. Execute searches across multiple engines dynamically
+        for search_query in search_queries:
+            logger.info(f"🔍 Executing dynamic search: {search_query}")
 
-        # 3. Wikipedia API (for encyclopedic content)
-        wiki_results = self._search_wikipedia_api(query)
-        if wiki_results:
-            all_results.extend(wiki_results)
-            logger.info(f"✅ Wikipedia API returned {len(wiki_results)} results")
+            # DuckDuckGo web search (dynamic results)
+            ddg_results = await self._search_duckduckgo_web(search_query)
+            if ddg_results:
+                all_results.extend(ddg_results)
+                logger.info(f"✅ DuckDuckGo web returned {len(ddg_results)} results")
 
-        # 4. Dynamic news sources based on query analysis
-        news_results = await self._search_dynamic_news_sources(query, search_strategy)
-        if news_results:
-            all_results.extend(news_results)
-            logger.info(f"✅ Dynamic news sources returned {len(news_results)} results")
+            # Bing news search (dynamic results)
+            bing_results = await self._search_bing_news(search_query)
+            if bing_results:
+                all_results.extend(bing_results)
+                logger.info(f"✅ Bing news returned {len(bing_results)} results")
 
-        if all_results:
+            # Wikipedia dynamic search
+            wiki_results = self._search_wikipedia_api(search_query)
+            if wiki_results:
+                all_results.extend(wiki_results)
+                logger.info(f"✅ Wikipedia returned {len(wiki_results)} results")
+
+        # 3. Dynamic content extraction from found URLs
+        enriched_results = await self._enrich_results_with_content(all_results)
+
+        if enriched_results:
             # Remove duplicates and sort by relevance
             unique_results = []
             seen_urls = set()
-            for result in all_results:
+            for result in enriched_results:
                 if result.get("url") and result["url"] not in seen_urls:
                     seen_urls.add(result["url"])
                     unique_results.append(result)
@@ -109,24 +89,24 @@ class OptimizedBulletproofSearch:
             # Sort by relevance score
             unique_results.sort(key=lambda x: x.get("relevance", 0), reverse=True)
 
-            logger.info(f"🎯 Total unique results: {len(unique_results)}")
+            logger.info(f"🎯 Total unique dynamic results: {len(unique_results)}")
             return {
                 "success": True,
                 "query": query,
-                "results": unique_results[:8],  # Top 8 most relevant
-                "method": "optimized_dynamic_search",
+                "results": unique_results[:10],  # Top 10 most relevant
+                "method": "fully_dynamic_search",
                 "real_search": True,
-                "strategy": search_strategy,
+                "search_queries": search_queries,
             }
         else:
-            logger.warning(f"⚠️ All optimized APIs failed for query: {query}")
+            logger.warning(f"⚠️ No dynamic results found for query: {query}")
             return {
                 "success": False,
                 "query": query,
                 "results": [],
-                "method": "no_fallback",
-                "error": "All verified search APIs failed - no fake results provided",
-                "real_search": False,
+                "method": "dynamic_search_failed",
+                "error": "No current results found from dynamic search engines",
+                "real_search": True,
             }
 
     def _search_duckduckgo_instant(self, query: str) -> List[Dict]:
@@ -231,7 +211,8 @@ class OptimizedBulletproofSearch:
                                 "title": data.get("title", query),
                                 "url": data.get("content_urls", {})
                                 .get("desktop", {})
-                                .get("page", ""),                                "snippet": data.get("extract", "")[:300],
+                                .get("page", ""),
+                                "snippet": data.get("extract", "")[:300],
                                 "source": "Wikipedia",
                                 "relevance": relevance + 2,  # Boost Wikipedia
                             }
@@ -242,40 +223,6 @@ class OptimizedBulletproofSearch:
         except Exception as e:
             logger.warning(f"Wikipedia API error: {str(e)}")
             return []
-
-    def _calculate_enhanced_relevance(self, query: str, title: str, content: str, strategy: Dict) -> int:
-        """
-        Enhanced relevance calculation considering search strategy
-        """
-        query_words = set(query.lower().split())
-        title_words = set(title.lower().split())
-        content_words = set(content.lower().split())
-
-        # Base relevance from word matches
-        title_matches = len(query_words.intersection(title_words))
-        content_matches = len(query_words.intersection(content_words))
-        relevance = title_matches * 3 + content_matches
-
-        # Location-specific boosting
-        if strategy.get("location_specific"):
-            target_region = strategy.get("target_region", "").lower()
-            if target_region:
-                if target_region in title.lower():
-                    relevance += 5  # Strong boost for location in title
-                if target_region in content.lower():
-                    relevance += 3  # Moderate boost for location in content
-
-        # General news terms boost
-        news_terms = ["news", "latest", "today", "breaking", "current", "update", "report"]
-        if any(term in title.lower() or term in content.lower() for term in news_terms):
-            relevance += 2
-
-        # Recency indicators
-        recent_terms = ["today", "2025", "this week", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        if any(term in title.lower() or term in content.lower() for term in recent_terms):
-            relevance += 2
-
-        return min(relevance, 15)  # Cap at 15
 
     def _extract_topic_keywords(self, query: str) -> Dict[str, List[str]]:
         """Extract main topic keywords from query"""
@@ -384,173 +331,384 @@ class OptimizedBulletproofSearch:
 
         return min(relevance, 10)  # Cap at 10
 
-    async def _analyze_query_and_select_sources(self, query: str) -> Dict:
+    async def _generate_dynamic_search_queries(self, query: str) -> List[str]:
         """
-        Use LLM to analyze query and determine optimal news sources
+        Generate multiple dynamic search queries based on user intent
         """
         try:
-            if not self.llm:
-                return self._fallback_source_selection(query)
-                
-            prompt = f"""
-            Analyze this search query and recommend the best news sources and approach:
-            
-            Query: "{query}"
-            
-            Available source categories:
-            - global: General international news (BBC, CNN)
-            - asia: Asian regional news including South Asia
-            - nepal: Nepal-specific news sources (Kathmandu Post, My Republica)
-            - india: India-specific news sources (Times of India, Hindustan Times)
-            - technology: Tech news (TechCrunch, Wired, Ars Technica)
-            - business: Business/financial news (Bloomberg, Financial Times)
-            
-            Respond with JSON:
-            {{
-                "primary_categories": ["category1", "category2"],
-                "approach": "description of search strategy",
-                "location_specific": true/false,
-                "target_region": "region name if applicable"
-            }}
-            
-            For location-specific queries like "Nepal news", prioritize regional sources.
-            For general news, use global sources.
-            For specific topics, use topic-specific sources.
-            """
-            
-            response = await self.llm.ask(prompt)
-            
-            # Extract JSON from response
-            import re
-            import json
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                try:
-                    strategy = json.loads(json_match.group())
-                    return strategy
-                except json.JSONDecodeError:
-                    pass
-                    
-            return self._fallback_source_selection(query)
-            
+            if self.llm:
+                prompt = f"""
+                Generate 3-4 specific search queries for finding current news based on this request:
+
+                User Query: "{query}"
+
+                Create queries that will find:
+                1. Current/recent news articles
+                2. Location-specific sources if mentioned
+                3. Relevant breaking news
+                4. Official reports or announcements
+
+                Make queries specific and likely to return current results.
+
+                Examples:
+                - For "Latvia news today" → ["Latvia breaking news 2025", "Latvia headlines June 2025", "Riga news today"]
+                - For "Nepal politics" → ["Nepal political news 2025", "Nepal government latest", "Kathmandu politics today"]
+
+                Return only a JSON array of search strings:
+                ["query1", "query2", "query3"]
+                """
+
+                response = await self.llm.ask(prompt)
+
+                # Extract JSON array from response
+                import json
+                import re
+
+                json_match = re.search(r"\[.*?\]", response, re.DOTALL)
+                if json_match:
+                    try:
+                        queries = json.loads(json_match.group())
+                        if isinstance(queries, list) and queries:
+                            logger.info(
+                                f"🧠 LLM generated {len(queries)} dynamic queries"
+                            )
+                            return queries
+                    except json.JSONDecodeError:
+                        pass
+
+            # Fallback: generate queries based on analysis
+            return self._generate_fallback_queries(query)
+
         except Exception as e:
-            logger.warning(f"Failed to analyze query with LLM: {e}")
-            return self._fallback_source_selection(query)
+            logger.warning(f"Failed to generate dynamic queries: {e}")
+            return self._generate_fallback_queries(query)
 
-    def _fallback_source_selection(self, query: str) -> Dict:
+    def _generate_fallback_queries(self, query: str) -> List[str]:
         """
-        Fallback source selection when LLM is not available
+        Generate fallback search queries when LLM is not available
         """
+        base_queries = []
         query_lower = query.lower()
-        
-        # Location-based detection
-        if "nepal" in query_lower:
-            return {
-                "primary_categories": ["nepal", "asia"],
-                "approach": "Nepal-focused search with regional backup",
-                "location_specific": True,
-                "target_region": "nepal"
-            }
-        elif "india" in query_lower:
-            return {
-                "primary_categories": ["india", "asia"],
-                "approach": "India-focused search with regional backup",
-                "location_specific": True,
-                "target_region": "india"
-            }
-        
-        # Topic-based detection
-        elif any(term in query_lower for term in ["crypto", "technology", "tech", "ai", "software"]):
-            return {
-                "primary_categories": ["technology", "global"],
-                "approach": "Technology-focused search",
-                "location_specific": False,
-                "target_region": None
-            }
-        elif any(term in query_lower for term in ["business", "economy", "finance", "market"]):
-            return {
-                "primary_categories": ["business", "global"],
-                "approach": "Business-focused search",
-                "location_specific": False,
-                "target_region": None
-            }
+
+        # Extract key terms
+        words = query_lower.split()
+        location_words = [
+            "nepal",
+            "india",
+            "latvia",
+            "china",
+            "usa",
+            "uk",
+            "europe",
+            "asia",
+        ]
+        topic_words = [
+            "news",
+            "politics",
+            "economy",
+            "business",
+            "technology",
+            "health",
+        ]
+
+        # Detect location
+        location = None
+        for word in words:
+            if word in location_words:
+                location = word
+                break
+
+        # Detect topic
+        topic = "news"  # default
+        for word in words:
+            if word in topic_words:
+                topic = word
+                break
+
+        if location:
+            # Location-specific queries
+            base_queries.extend(
+                [
+                    f"{location} {topic} today 2025",
+                    f"{location} breaking news June 2025",
+                    f"{location} latest headlines",
+                    f"{location} current affairs 2025",
+                ]
+            )
         else:
-            # Default to global news
-            return {
-                "primary_categories": ["global", "asia"],
-                "approach": "General news search",
-                "location_specific": False,
-                "target_region": None
+            # General queries
+            base_queries.extend(
+                [
+                    f"{topic} today 2025",
+                    f"breaking {topic} June 2025",
+                    f"latest {topic} headlines",
+                    f"current {topic} analysis",
+                ]
+            )
+
+        return base_queries[:4]  # Return top 4 queries
+
+    async def _search_duckduckgo_web(self, query: str) -> List[Dict]:
+        """
+        Dynamic web search using DuckDuckGo (not just instant answers)
+        """
+        try:
+            # Use DuckDuckGo HTML search for web results
+            search_url = "https://duckduckgo.com/html/"
+            params = {
+                "q": query,
+                "kl": "us-en",  # English results
+                "s": "0",  # Start from first result
             }
 
-    async def _search_dynamic_news_sources(self, query: str, strategy: Dict) -> List[Dict]:
-        """
-        Search news sources dynamically based on strategy
-        """
-        results = []
-        categories = strategy.get("primary_categories", ["global"])
-        
-        logger.info(f"📰 Dynamic news search using categories: {categories}")
-        
-        for category in categories:
-            if category in self.news_sources:
-                feeds = self.news_sources[category]
-                category_results = await self._search_news_category(query, feeds, category, strategy)
-                results.extend(category_results)
-                
-        # Remove duplicates and limit results
-        unique_results = []
-        seen_urls = set()
-        for result in results:
-            url = result.get("url", "")
-            if url and url not in seen_urls:
-                seen_urls.add(url)
-                unique_results.append(result)
-        
-        # Sort by relevance and return top results
-        unique_results.sort(key=lambda x: x.get("relevance", 0), reverse=True)
-        return unique_results[:10]  # Top 10 from dynamic sources
+            response = self.session.get(search_url, params=params, timeout=10)
+            response.raise_for_status()
 
-    async def _search_news_category(self, query: str, feeds: List, category: str, strategy: Dict) -> List[Dict]:
-        """
-        Search a specific category of news feeds
-        """
-        results = []
-        
-        for feed_url, source_name in feeds:
-            try:
-                response = self.session.get(feed_url, timeout=15)
-                response.raise_for_status()
-                
-                import feedparser
-                feed = feedparser.parse(response.content)
-                logger.info(f"📰 {source_name}: found {len(feed.entries)} entries")
-                
-                for entry in feed.entries[:15]:  # Check more entries for better filtering
-                    title = entry.get("title", "")
-                    summary = entry.get("summary", "")
-                    
-                    # Calculate relevance with enhanced scoring for location-specific queries
-                    relevance_score = self._calculate_enhanced_relevance(
-                        query, title, summary, strategy
+            # Parse HTML results
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(response.content, "html.parser")
+
+            results = []
+            # Look for search result links
+            result_links = soup.find_all("a", class_="result__url")
+            result_titles = soup.find_all("a", class_="result__a")
+            result_snippets = soup.find_all("a", class_="result__snippet")
+
+            for i, (link, title_elem, snippet_elem) in enumerate(
+                zip(result_links[:5], result_titles[:5], result_snippets[:5])
+            ):
+                if i >= 5:  # Limit results
+                    break
+
+                url = link.get("href", "")
+                title = title_elem.get_text(strip=True) if title_elem else "No title"
+                snippet = snippet_elem.get_text(strip=True) if snippet_elem else ""
+
+                if url and not url.startswith("javascript:"):
+                    # Calculate relevance
+                    relevance = self._calculate_web_result_relevance(
+                        query, title, snippet
                     )
-                    
-                    # More lenient threshold for location-specific queries
-                    threshold = 2 if strategy.get("location_specific") else 4
-                    
-                    if relevance_score >= threshold:
-                        results.append({
-                            "title": title,
-                            "url": entry.get("link", ""),
-                            "snippet": summary[:300],
-                            "source": source_name,
-                            "published": entry.get("published", ""),
-                            "relevance": relevance_score,
-                            "category": category
-                        })
-                        
+
+                    if relevance >= 2:  # Filter out irrelevant results
+                        results.append(
+                            {
+                                "title": title,
+                                "url": url,
+                                "snippet": snippet[:300],
+                                "source": "DuckDuckGo Web Search",
+                                "relevance": relevance,
+                                "search_engine": "duckduckgo",
+                            }
+                        )
+            return results
+
+        except Exception as e:
+            logger.warning(f"DuckDuckGo web search error: {str(e)}")
+            return []
+
+    async def _search_bing_news(self, query: str) -> List[Dict]:
+        """
+        Dynamic news search using Bing News web scraping (no RSS dependencies)
+        """
+        try:
+            # Use Bing news search with web scraping
+            search_url = "https://www.bing.com/news/search"
+            params = {
+                "q": query,
+                "qft": 'interval%3d"1"',  # Recent results
+                "form": "YNWS02",
+            }
+
+            response = self.session.get(search_url, params=params, timeout=10)
+            response.raise_for_status()
+
+            # Parse HTML content for news results
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(response.content, "html.parser")
+
+            results = []
+
+            # Find news articles in Bing's structure
+            news_cards = soup.find_all("div", class_=["news-card", "newsitem"])
+
+            for card in news_cards[:5]:  # Limit to top 5 results
+                try:
+                    # Extract title
+                    title_elem = (
+                        card.find("a", {"class": "title"})
+                        or card.find("h2")
+                        or card.find("a")
+                    )
+                    title = title_elem.get_text(strip=True) if title_elem else ""
+
+                    # Extract URL
+                    url = title_elem.get("href", "") if title_elem else ""
+                    if url and not url.startswith("http"):
+                        url = (
+                            "https://www.bing.com" + url if url.startswith("/") else ""
+                        )
+
+                    # Extract snippet/description
+                    snippet_elem = card.find("div", {"class": "snippet"}) or card.find(
+                        "p"
+                    )
+                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ""
+
+                    if title and url and url.startswith("http"):
+                        relevance = self._calculate_web_result_relevance(
+                            query, title, snippet
+                        )
+
+                        results.append(
+                            {
+                                "title": title,
+                                "url": url,
+                                "snippet": snippet[:300],
+                                "source": "Bing News Search",
+                                "relevance": relevance,
+                                "search_engine": "bing",
+                                "query": query,
+                            }
+                        )
+
+                except Exception as e:
+                    logger.warning(f"Failed to parse Bing news card: {str(e)}")
+                    continue
+
+            return results
+
+        except Exception as e:
+            logger.warning(f"Bing news search error: {str(e)}")
+            return []
+
+    def _calculate_web_result_relevance(
+        self, query: str, title: str, content: str
+    ) -> int:
+        """
+        Calculate relevance for web search results
+        """
+        query_words = set(query.lower().split())
+        title_words = set(title.lower().split())
+        content_words = set(content.lower().split())
+
+        # Word match scoring
+        title_matches = len(query_words.intersection(title_words))
+        content_matches = len(query_words.intersection(content_words))
+        relevance = title_matches * 3 + content_matches
+
+        # Boost for news-related content
+        news_indicators = [
+            "news",
+            "breaking",
+            "latest",
+            "today",
+            "2025",
+            "report",
+            "update",
+        ]
+        if any(
+            word in title.lower() or word in content.lower() for word in news_indicators
+        ):
+            relevance += 3
+
+        # Boost for recent content
+        recent_indicators = ["june", "2025", "today", "yesterday", "this week"]
+        if any(
+            word in title.lower() or word in content.lower()
+            for word in recent_indicators
+        ):
+            relevance += 2
+
+        return min(relevance, 15)
+
+    async def _enrich_results_with_content(self, results: List[Dict]) -> List[Dict]:
+        """
+        Enrich search results by extracting more content from the actual web pages
+        """
+        enriched_results = []
+
+        for result in results[:8]:  # Limit to avoid too many requests
+            try:
+                url = result.get("url", "")
+                if not url or "example.com" in url:
+                    enriched_results.append(result)
+                    continue
+
+                # Extract more content from the page
+                page_content = await self._extract_page_content(url)
+
+                if page_content:
+                    # Update the result with richer content
+                    result["full_content"] = page_content[:1000]  # First 1000 chars
+                    result["enhanced"] = True
+
+                    # Recalculate relevance with full content
+                    query = result.get("query", "")
+                    if query:
+                        enhanced_relevance = self._calculate_web_result_relevance(
+                            query, result.get("title", ""), page_content
+                        )
+                        result["relevance"] = max(
+                            result.get("relevance", 0), enhanced_relevance
+                        )
+
+                enriched_results.append(result)
+
             except Exception as e:
-                logger.warning(f"Failed to fetch from {source_name}: {str(e)}")
-                continue
-                
-        return results
+                logger.warning(
+                    f"Failed to enrich result {result.get('url', '')}: {str(e)}"
+                )
+                enriched_results.append(result)
+
+        return enriched_results
+
+    async def _extract_page_content(self, url: str) -> str:
+        """
+        Extract main content from a web page
+        """
+        try:
+            response = self.session.get(url, timeout=8)
+            response.raise_for_status()
+
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(response.content, "html.parser")
+
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+
+            # Try to find main content areas
+            content_selectors = [
+                "article",
+                ".content",
+                ".post-content",
+                ".entry-content",
+                ".article-body",
+                "main",
+                "#content",
+            ]
+
+            content_text = ""
+            for selector in content_selectors:
+                elements = soup.select(selector)
+                if elements:
+                    content_text = elements[0].get_text(strip=True)
+                    break
+
+            # Fallback to body content
+            if not content_text:
+                content_text = soup.get_text(strip=True)
+
+            # Clean and limit content
+            lines = [line.strip() for line in content_text.split("\n") if line.strip()]
+            content_text = " ".join(lines[:10])  # First 10 non-empty lines
+
+            return content_text[:1500]  # Limit to 1500 characters
+
+        except Exception as e:
+            logger.warning(f"Failed to extract content from {url}: {str(e)}")
+            return ""
