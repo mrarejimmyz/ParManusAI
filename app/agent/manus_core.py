@@ -13,6 +13,7 @@ from app.agent.manus_utils import ManusUtils
 from app.agent.toolcall import ToolCallAgent
 from app.config import config
 from app.exceptions import AgentTaskComplete
+from app.llm_planning import LLMDrivenPlanner
 from app.logger import logger
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.reasoning import EnhancedReasoningEngine
@@ -97,6 +98,7 @@ class Manus(ToolCallAgent):
         self.deep_reasoning_enabled = True
 
         self.planning_module = ManusPlanning(self)
+        self.llm_planner = LLMDrivenPlanner(llm=self.llm)  # New LLM-driven planner
         self.browser_handler = ManusBrowserHandler(self)
         self.utils_module = ManusUtils(self)
 
@@ -119,7 +121,21 @@ class Manus(ToolCallAgent):
             raise
 
     async def create_task_plan(self, user_request: str) -> Dict:
-        return await self.planning_module.create_task_plan(user_request)
+        """Create comprehensive task plan using LLM-driven planner"""
+        logger.info(f"🎯 Creating LLM-driven comprehensive plan for: {user_request}")
+
+        # Use the new LLM-driven planner for all requests
+        plan = await self.llm_planner.create_comprehensive_plan(user_request)
+
+        # Also create legacy plan for compatibility
+        legacy_plan = await self.planning_module.create_task_plan(user_request)
+
+        # Merge the plans (LLM plan takes priority)
+        if plan:
+            plan["legacy_phases"] = legacy_plan.get("phases", [])
+            return plan
+        else:
+            return legacy_plan
 
     async def create_todo_list(self, plan: Dict) -> str:
         return await self.planning_module.create_todo_list(plan)
