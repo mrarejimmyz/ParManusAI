@@ -1,6 +1,6 @@
 """
-Optimized Manus Action Executor with Nodriver Integration
-Clean, efficient execution for different step types
+Optimized Manus Action Executor with Multi-Engine Search
+Clean, efficient execution that bypasses CAPTCHA using multiple search engines
 """
 
 import os
@@ -8,39 +8,42 @@ from datetime import datetime
 from typing import Optional
 
 from app.logger import logger
-from app.tool.nodriver_search import NodriverGoogleSearch
+from app.tool.multi_engine_search import MultiEngineSearch
 
 
 class ManusActionExecutor:
-    """Optimized action executor with nodriver search integration"""
+    """Optimized action executor with multi-engine search integration"""
 
     def __init__(self, agent):
         """Initialize with agent reference"""
         self.agent = agent
         self.llm = getattr(agent, "llm", None)
-        self.nodriver_search = NodriverGoogleSearch()
+        self.search_engine = MultiEngineSearch()
         self.last_search_results = None
 
     async def execute_research_action(self, step: str) -> bool:
-        """Execute research with nodriver Google search"""
+        """Execute research with multi-engine search (DuckDuckGo, Bing, etc.)"""
         try:
             logger.info(f"🔍 RESEARCH ACTION: {step}")
 
             # Extract query from user request
             query = self._extract_search_query()
             if not query:
-                logger.warning("⚠️ No search query found - continuing with LLM knowledge")
+                logger.warning(
+                    "⚠️ No search query found - continuing with LLM knowledge"
+                )
                 return True
 
-            logger.info(f"🔍 Searching: {query}")
+            logger.info(f"🔍 Multi-engine search: {query}")
 
-            # Perform nodriver search
-            result = await self.nodriver_search.perform_google_search(query)
-            
+            # Perform multi-engine search (bypasses Google CAPTCHA)
+            result = await self.search_engine.perform_google_search(query)
+
             if result.get("success"):
                 self.last_search_results = result
                 count = len(result.get("results", []))
-                logger.info(f"✅ Found {count} search results")
+                method = result.get("method", "unknown")
+                logger.info(f"✅ Found {count} results via {method}")
             else:
                 error = result.get("error", "Unknown error")
                 logger.warning(f"⚠️ Search failed: {error}")
@@ -68,7 +71,7 @@ class ManusActionExecutor:
         """Execute document creation using LLM"""
         try:
             logger.info(f"📝 CREATION ACTION: {step}")
-            
+
             if not self.llm:
                 logger.warning("⚠️ No LLM available for document creation")
                 return False
@@ -76,23 +79,27 @@ class ManusActionExecutor:
             # Get user request and context
             user_message = self._get_user_message()
             context = self._get_search_context()
-            
+
             # Create document prompt
             prompt = self._build_creation_prompt(user_message, context)
-            
+
             logger.info("🧠 Creating document with LLM...")
-            
+
             # Generate content
             response = await self.llm.ask(prompt)
-            content = response.content if hasattr(response, 'content') else str(response)
-            
+            content = (
+                response.content if hasattr(response, "content") else str(response)
+            )
+
             if content and len(content) > 300:
                 # Save document
                 filename = self._determine_filename(user_message)
                 filepath = self._save_document(filename, content)
-                
+
                 logger.info(f"✅ Document created: {filepath}")
-                print(f"\n📄 **DOCUMENT CREATED**\n✅ File: {filename}\n✅ Path: {filepath}")
+                print(
+                    f"\n📄 **DOCUMENT CREATED**\n✅ File: {filename}\n✅ Path: {filepath}"
+                )
                 return True
             else:
                 logger.warning("⚠️ Generated content too short")
@@ -115,7 +122,7 @@ class ManusActionExecutor:
     def _extract_search_query(self) -> Optional[str]:
         """Extract search query from user message"""
         user_message = self._get_user_message()
-        
+
         if "air india" in user_message and "crash" in user_message:
             return "air india crash official report investigation details"
         elif "crypto" in user_message:
@@ -140,21 +147,27 @@ class ManusActionExecutor:
         """Get context from search results"""
         if not (self.last_search_results and self.last_search_results.get("results")):
             return "No web search data available - using LLM knowledge"
-        
-        context_parts = ["Recent search results:"]
+
+        method = self.last_search_results.get("method", "search")
+        context_parts = [f"Search results from {method}:"]
+
         for i, result in enumerate(self.last_search_results["results"][:3], 1):
             title = result.get("title", "No title")
             snippet = result.get("snippet", "")
-            if snippet:
+            url = result.get("url", "")
+
+            if snippet and title:
                 context_parts.append(f"{i}. {title}: {snippet}")
-        
+                if url and not url.startswith("example.com"):
+                    context_parts.append(f"   Source: {url}")
+
         return "\n".join(context_parts)
 
     def _build_creation_prompt(self, user_message: str, context: str) -> str:
         """Build optimized prompt for document creation"""
         return f"""Create a comprehensive, professional analysis report based on this request: "{user_message}"
 
-Available Context:
+Available Research Data:
 {context}
 
 Requirements:
@@ -165,13 +178,14 @@ Requirements:
 - Minimum 1500 words
 - Include relevant statistics, dates, and specific details
 - Professional tone suitable for business/academic use
+- Use the research data provided above to enhance accuracy
 
 Generate the complete report now:"""
 
     def _determine_filename(self, user_message: str) -> str:
         """Determine appropriate filename"""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         if "air india" in user_message and "crash" in user_message:
             return f"air_india_crash_analysis_report_{timestamp}.md"
         elif "crypto" in user_message:
@@ -185,8 +199,8 @@ Generate the complete report now:"""
         """Save document to workspace"""
         workspace_path = os.path.join(os.getcwd(), "workspace", filename)
         os.makedirs(os.path.dirname(workspace_path), exist_ok=True)
-        
+
         with open(workspace_path, "w", encoding="utf-8") as f:
             f.write(content)
-        
+
         return workspace_path

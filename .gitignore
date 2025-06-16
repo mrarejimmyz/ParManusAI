@@ -8,6 +8,18 @@ data/
 # Workspace
 workspace/
 
+# Backup and temporary files
+*.backup
+*.backup_*
+*_backup.py
+*_broken.py
+*_fixed.py
+*_optimized.py
+test_*.log
+test_multi_search.py
+*_old.py
+*.old
+
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -238,3 +250,5 @@ test_complete_flow.py
 test_llm_direct_fixed.py
 test_llm_direct.py
 app/tool/nodriver_search.py
+test_multi_search.py
+CLEANUP_SUMMARY.md
