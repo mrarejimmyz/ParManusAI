@@ -15,9 +15,19 @@ workspace/
 *_broken.py
 *_fixed.py
 *_optimized.py
+*_legacy.py
+*_original.py
+*_simple.py
 test_*.log
-test_multi_search.py
+test_*.py
 *_old.py
+*.old
+debug_tools.py
+verify_*.py
+validate_*.sh
+*_summary.md
+optimization_docs/
+*.whl
 *.old
 
 ### Python ###
@@ -252,3 +262,5 @@ test_llm_direct.py
 app/tool/nodriver_search.py
 test_multi_search.py
 CLEANUP_SUMMARY.md
+FINAL_CLEANUP_COMPLETE.md
+SINGLE_MODEL_UPDATE.md

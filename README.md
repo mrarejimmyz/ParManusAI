@@ -47,9 +47,8 @@ A comprehensive AI agent system with full tool calling capabilities, optimized f
    curl -fsSL https://ollama.ai/install.sh | sh
    ```
 
-2. Pull models:
+2. Pull the vision model (handles both tools and vision):
    ```bash
-   ollama pull llama3.2
    ollama pull llama3.2-vision
    ```
 

@@ -1,7 +1,7 @@
-# ParManus AI Configuration - Hybrid Setup (Tools + Vision)
+# ParManus AI Configuration - llama3.2-vision Only
 [llm]
 api_type = "ollama"
-model = "llama3.2"  # Primary model for tools
+model = "llama3.2-vision"              # Single model for everything
 base_url = "http://localhost:11434/v1"
 api_key = "ollama"
 max_tokens = 2048
@@ -10,7 +10,7 @@ temperature = 0.0
 [llm.vision]
 enabled = true
 api_type = "ollama"
-model = "llama3.2-vision"  # Secondary model for vision
+model = "llama3.2-vision"              # Same model for consistency
 base_url = "http://localhost:11434/v1"
 api_key = "ollama"
 max_tokens = 2048
@@ -30,4 +30,3 @@ memory_compression = false
 speak = false
 listen = false
 agent_name = "Friday"
-
