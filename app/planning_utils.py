@@ -12,10 +12,36 @@ class TaskAnalyzer:
         """Determine task type from user request with enhanced pattern matching."""
         request_lower = user_request.lower()
 
+        # Report generation tasks - includes crash reports, incident reports, etc.
+        if any(
+            x in request_lower
+            for x in [
+                "report",
+                "analysis",
+                "crash",
+                "incident",
+                "investigation",
+                "detailed",
+                "comprehensive",
+            ]
+        ) and any(
+            x in request_lower
+            for x in ["create", "generate", "write", "make", "compile", "produce"]
+        ):
+            return "report_generation"
+
         # News and current information gathering tasks
         if any(
             x in request_lower
-            for x in ["news", "current", "today", "latest", "recent", "headlines", "breaking"]
+            for x in [
+                "news",
+                "current",
+                "today",
+                "latest",
+                "recent",
+                "headlines",
+                "breaking",
+            ]
         ) or any(
             phrase in request_lower
             for phrase in ["top 10", "top ten", "what's happening", "current events"]
@@ -93,14 +119,60 @@ class PlanGenerator:
         """Create execution phases based on task type and context."""
         task_type = context.get("task_type", "general_task")
 
-        if task_type == "news_gathering":
+        if task_type == "report_generation":
+            return [
+                {
+                    "id": 1,
+                    "title": "Research and Information Gathering",
+                    "description": "Research the topic and gather relevant information from multiple sources",
+                    "tools_needed": ["browser_use"],
+                    "steps": [
+                        "Identify key search terms and sources",
+                        "Search for reliable information sources",
+                        "Extract relevant facts and data",
+                        "Gather information from multiple perspectives",
+                    ],
+                    "success_criteria": "Comprehensive information collected from reliable sources",
+                },
+                {
+                    "id": 2,
+                    "title": "Verification and Cross-Referencing",
+                    "description": "Verify information accuracy and cross-reference multiple sources",
+                    "tools_needed": ["browser_use"],
+                    "steps": [
+                        "Verify facts from multiple sources",
+                        "Check for consistency across sources",
+                        "Identify any conflicting information",
+                        "Validate timeline and details",
+                    ],
+                    "success_criteria": "Information verified and cross-referenced for accuracy",
+                },
+                {
+                    "id": 3,
+                    "title": "Report Creation and Formatting",
+                    "description": "Create comprehensive report with proper structure and formatting",
+                    "tools_needed": ["python_execute"],
+                    "steps": [
+                        "Organize collected information logically",
+                        "Create detailed report with proper sections",
+                        "Format as professional markdown document",
+                        "Include executive summary and recommendations",
+                    ],
+                    "success_criteria": "Professional report created with comprehensive analysis",
+                },
+            ]
+
+        elif task_type == "news_gathering":
             return [
                 {
                     "id": 1,
                     "title": "Research Planning",
                     "description": "Plan news sources and research strategy",
                     "tools_needed": ["browser_use"],
-                    "steps": ["Identify reliable news sources", "Plan research approach"],
+                    "steps": [
+                        "Identify reliable news sources",
+                        "Plan research approach",
+                    ],
                     "success_criteria": "Research strategy established",
                 },
                 {
@@ -112,7 +184,7 @@ class PlanGenerator:
                         "Visit major news websites",
                         "Extract current headlines",
                         "Gather detailed information",
-                        "Verify information from multiple sources"
+                        "Verify information from multiple sources",
                     ],
                     "success_criteria": "Current news information collected",
                 },
@@ -121,7 +193,11 @@ class PlanGenerator:
                     "title": "Content Creation",
                     "description": "Compile and format news into requested format",
                     "tools_needed": ["python_execute"],
-                    "steps": ["Organize collected news", "Create formatted output", "Generate news_report.md"],
+                    "steps": [
+                        "Organize collected news",
+                        "Create formatted output",
+                        "Generate news_report.md",
+                    ],
                     "success_criteria": "News report created with real current information",
                 },
             ]

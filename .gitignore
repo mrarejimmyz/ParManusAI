@@ -233,3 +233,8 @@ test_intelligent_creation.py
 test_quick_crypto.py
 test_reasoning_resume.py
 test_resume_creation.py
+test_air_india_fix.py
+test_complete_flow.py
+test_llm_direct_fixed.py
+test_llm_direct.py
+app/tool/nodriver_search.py

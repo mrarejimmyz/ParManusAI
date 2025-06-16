@@ -144,24 +144,24 @@ class Manus(ToolCallAgent):
             # Validate and recover from invalid position
             if not await self.utils_module._validate_current_position():
                 logger.warning("Invalid position detected, attempting recovery")
-                
+
                 # Ensure we have a valid plan
                 if not self.current_plan or "phases" not in self.current_plan:
                     logger.error("No valid plan exists")
                     return False
-                
+
                 # Fix phase index if out of bounds
                 if self.current_phase >= len(self.current_plan["phases"]):
                     self.current_phase = len(self.current_plan["phases"]) - 1
                     logger.info(f"Reset phase to {self.current_phase}")
-                
+
                 # Fix step index if out of bounds
                 current_phase = self.current_plan["phases"][self.current_phase]
                 if "steps" in current_phase:
                     if self.current_step >= len(current_phase["steps"]):
                         self.current_step = len(current_phase["steps"]) - 1
                         logger.info(f"Reset step to {self.current_step}")
-                    
+
                     # If still invalid, reset to beginning of phase
                     if self.current_step < 0:
                         self.current_step = 0
@@ -169,13 +169,15 @@ class Manus(ToolCallAgent):
                 else:
                     self.current_step = 0
                     logger.info("No steps in current phase, reset step to 0")
-                
+
                 # Validate again after recovery
                 if not await self.utils_module._validate_current_position():
                     logger.error("Recovery failed, position still invalid")
                     return False
-                
-                logger.info(f"Successfully recovered to phase {self.current_phase}, step {self.current_step}")
+
+                logger.info(
+                    f"Successfully recovered to phase {self.current_phase}, step {self.current_step}"
+                )
 
             current_phase = await self.utils_module._get_current_phase()
             current_step = await self.utils_module._get_current_step()
@@ -184,7 +186,7 @@ class Manus(ToolCallAgent):
             if not current_phase or not current_step:
                 logger.error("No valid phase or step found in plan")
                 return False
-                
+
             url = await self._extract_url_from_request(current_step)
             if url:
                 if not self.browser_state.get("initialized"):
@@ -203,47 +205,62 @@ class Manus(ToolCallAgent):
 
             # Handle different types of steps with actual tool execution
             step_lower = current_step.lower()
-            
+
             # Initialize action executor if not already done
-            if not hasattr(self, 'action_executor'):
-                from app.agent.manus_action_executor import ManusActionExecutor
+            if not hasattr(self, "action_executor"):
+                from app.agent.manus_action_executor_enhanced_clean import (
+                    ManusActionExecutor,
+                )
+
                 self.action_executor = ManusActionExecutor(self)
-            
+
             # Research and planning steps - navigate to relevant websites
-            if any(keyword in step_lower for keyword in ["research", "plan", "identify", "sources"]):
+            if any(
+                keyword in step_lower
+                for keyword in ["research", "plan", "identify", "sources"]
+            ):
                 logger.info(f"Executing research action for: {current_step}")
                 await self.action_executor.execute_research_action(current_step)
                 success = await self.utils_module.progress_to_next_step()
                 return True
-            
+
             # Data extraction steps - scrape and collect information
-            elif any(keyword in step_lower for keyword in ["extract", "headlines", "gather", "collect", "visit"]):
+            elif any(
+                keyword in step_lower
+                for keyword in ["extract", "headlines", "gather", "collect", "visit"]
+            ):
                 logger.info(f"Executing data extraction for: {current_step}")
                 await self.action_executor.execute_extraction_action(current_step)
                 success = await self.utils_module.progress_to_next_step()
                 return True
-            
+
             # Verification steps - check multiple sources
-            elif any(keyword in step_lower for keyword in ["verify", "check", "multiple sources", "confirm"]):
+            elif any(
+                keyword in step_lower
+                for keyword in ["verify", "check", "multiple sources", "confirm"]
+            ):
                 logger.info(f"Executing verification action for: {current_step}")
                 await self.action_executor.execute_verification_action(current_step)
                 success = await self.utils_module.progress_to_next_step()
                 return True
-            
+
             # File creation steps - generate reports and documents
-            elif any(keyword in step_lower for keyword in ["generate", "create", "format", "output", ".md"]):
+            elif any(
+                keyword in step_lower
+                for keyword in ["generate", "create", "format", "output", ".md"]
+            ):
                 logger.info(f"Executing file creation for: {current_step}")
                 await self.action_executor.execute_creation_action(current_step)
                 success = await self.utils_module.progress_to_next_step()
                 return True
-            
+
             # Navigation steps (legacy support)
             elif "navigate" in step_lower or "Navigate to website" in current_step:
                 logger.info(f"Executing navigation for: {current_step}")
                 await self.action_executor.execute_navigation_action(current_step)
                 success = await self.utils_module.progress_to_next_step()
                 return True
-            
+
             # Default case - try to determine action from context
             else:
                 logger.info(f"Executing default action for: {current_step}")
@@ -276,9 +293,13 @@ class Manus(ToolCallAgent):
 
             # Validate position before proceeding
             if not await self.utils_module._validate_current_position():
-                logger.warning("Invalid position detected in step(), attempting recovery")
+                logger.warning(
+                    "Invalid position detected in step(), attempting recovery"
+                )
                 # Attempt recovery using the recovery method
-                recovery_success = await self.utils_module.recover_from_invalid_position()
+                recovery_success = (
+                    await self.utils_module.recover_from_invalid_position()
+                )
                 if not recovery_success:
                     logger.error("Failed to recover from invalid position")
                     return "Error: Unable to recover from invalid position"

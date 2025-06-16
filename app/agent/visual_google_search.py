@@ -118,14 +118,40 @@ class VisualGoogleSearch:
         return {"success": False, "error": "Failed to verify Google homepage"}
 
     async def _find_and_use_search_box_with_annotation(self, query: str) -> Dict:
-        """Use web_search action to perform Google search directly"""
-        logger.info("🔍 Performing Google search using web_search action")
-        max_retries = 3
+        """Use multiple approaches to perform Google search with better reliability"""
+        logger.info("🔍 Performing Google search using improved approach")
+
+        # Method 1: Try direct navigation to Google search URL
+        try:
+            # Encode the query for URL
+            import urllib.parse
+
+            encoded_query = urllib.parse.quote_plus(query)
+            search_url = f"https://www.google.com/search?q={encoded_query}&num=10"
+
+            logger.info(f"🌐 Trying direct search URL: {search_url}")
+
+            # Navigate directly to the search results page
+            nav_result = await self.browser.execute(action="go_to_url", url=search_url)
+
+            if not nav_result.error:
+                logger.info("✅ Successfully navigated to Google search results")
+                return {"success": True}
+            else:
+                logger.warning(f"⚠️ Direct navigation failed: {nav_result.error}")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Direct navigation method failed: {str(e)}")
+
+        # Method 2: Try the web_search action as fallback
+        max_retries = 2
         retry_count = 0
 
         while retry_count < max_retries:
             try:
-                # Use the built-in web_search action instead of manual input
+                logger.info(f"🔍 Trying web_search action (attempt {retry_count + 1})")
+
+                # Use the built-in web_search action
                 search_result = await self.browser.execute(
                     action="web_search", query=query
                 )
@@ -136,29 +162,63 @@ class VisualGoogleSearch:
                 logger.info("✅ Successfully executed search using web_search")
                 return {"success": True}
 
-                retry_count += 1
-                logger.warning(
-                    f"⚠️ Search execution failed, attempt {retry_count} of {max_retries}"
-                )
-                await asyncio.sleep(1)
-
             except Exception as e:
-                logger.error(f"❌ Search box interaction failed: {str(e)}")
+                logger.warning(f"⚠️ Web search method failed: {str(e)}")
                 retry_count += 1
-                if retry_count >= max_retries:
-                    return {
-                        "success": False,
-                        "error": f"Failed to execute search after {max_retries} attempts",
-                    }
-                await asyncio.sleep(1)
+                if retry_count < max_retries:
+                    await asyncio.sleep(3)  # Wait before retry
 
-        return {"success": False, "error": "Failed to execute search"}
+        # Method 3: Try manual search box interaction as last resort
+        try:
+            logger.info("🔍 Trying manual search box interaction")
+
+            # First navigate to Google homepage
+            nav_result = await self.browser.execute(
+                action="go_to_url", url="https://www.google.com"
+            )
+
+            if nav_result.error:
+                raise Exception(f"Failed to navigate to Google: {nav_result.error}")
+
+            await asyncio.sleep(2)
+
+            # Try to find and click search box, then type query
+            type_result = await self.browser.execute(action="type_text", text=query)
+
+            if type_result.error:
+                raise Exception(f"Failed to type in search box: {type_result.error}")
+
+            # Press Enter to search
+            enter_result = await self.browser.execute(action="key_press", key="Return")
+
+            if not enter_result.error:
+                logger.info("✅ Successfully performed manual search")
+                await asyncio.sleep(3)  # Wait for results to load
+                return {"success": True}
+            else:
+                raise Exception(f"Failed to press Enter: {enter_result.error}")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Manual search method failed: {str(e)}")
+
+        return {
+            "success": False,
+            "error": "All search methods failed - direct URL, web_search action, and manual interaction",
+        }
 
     async def _extract_search_results(self) -> List[Dict]:
         """Extract search results using vision analysis"""
         logger.info("📑 Extracting search results with visual analysis")
 
         try:
+            # First check if we're on Google's CAPTCHA/sorry page
+            current_url = getattr(self.browser, "current_url", "")
+            if "sorry" in str(current_url) or "captcha" in str(current_url).lower():
+                logger.warning(
+                    "🚫 Google has shown a CAPTCHA page - search blocked by anti-bot protection"
+                )
+                return []
+
             # Extract search results using content extraction
             extract_result = await self.browser.execute(
                 action="extract_content",
