@@ -5,7 +5,9 @@ Clean, efficient execution that bypasses CAPTCHA using multiple search engines
 
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, List
+import json
+import re
 
 from app.logger import logger
 from app.tool.optimized_bulletproof_search import OptimizedBulletproofSearch
@@ -17,37 +19,62 @@ class ManusActionExecutor:
     def __init__(self, agent):
         """Initialize with agent reference"""
         self.agent = agent
-        self.llm = getattr(agent, "llm", None)
-        self.search_engine = OptimizedBulletproofSearch()
+        self.llm = getattr(agent, "llm", None)        # Pass LLM to search engine for dynamic reasoning
+        self.search_engine = OptimizedBulletproofSearch(llm=self.llm)
         self.last_search_results = None
 
     async def execute_research_action(self, step: str) -> bool:
-        """Execute research with multi-engine search (DuckDuckGo, Bing, etc.)"""
+        """Execute research with intelligent dynamic search based on user intent"""
         try:
             logger.info(f"🔍 RESEARCH ACTION: {step}")
 
-            # Extract query from user request
-            query = self._extract_search_query()
-            if not query:
-                logger.warning(
-                    "⚠️ No search query found - continuing with LLM knowledge"
-                )
+            # Use LLM to analyze user request and generate optimal search strategy
+            search_strategy = await self._analyze_user_intent_and_generate_search_strategy()
+            
+            if not search_strategy:
+                logger.warning("⚠️ Could not generate search strategy - using fallback direct search")
+                # Fallback: perform direct search with user's request
+                user_message = self._get_user_message()
+                result = await self.search_engine.perform_google_search(user_message)
+                
+                if result.get("success"):
+                    self.last_search_results = {
+                        "success": True,
+                        "results": result.get("results", [])[:10],
+                        "strategy": {"approach": "direct_fallback_search"},
+                        "method": "fallback_direct_search"
+                    }
+                    logger.info(f"✅ Fallback search found {len(result.get('results', []))[:10]} results")
+                
                 return True
 
-            logger.info(f"🔍 Multi-engine search: {query}")
+            logger.info(f"🧠 Generated search strategy: {search_strategy.get('approach', 'dynamic')}")
 
-            # Perform multi-engine search (bypasses Google CAPTCHA)
-            result = await self.search_engine.perform_google_search(query)
+            # Execute the dynamic search strategy
+            all_results = []
+            for search_query in search_strategy.get('queries', []):
+                logger.info(f"🔍 Executing search: {search_query}")
+                
+                result = await self.search_engine.perform_google_search(search_query)
+                
+                if result.get("success"):
+                    results = result.get("results", [])
+                    # Filter results based on relevance to original intent
+                    relevant_results = await self._filter_results_by_intent(results, search_strategy.get('intent', {}))
+                    all_results.extend(relevant_results)
+                    logger.info(f"✅ Found {len(relevant_results)} relevant results from query: {search_query}")
 
-            if result.get("success"):
-                self.last_search_results = result
-                count = len(result.get("results", []))
-                method = result.get("method", "unknown")
-                logger.info(f"✅ Found {count} results via {method}")
+            if all_results:
+                # Store consolidated results
+                self.last_search_results = {
+                    "success": True,
+                    "results": all_results[:10],  # Top 10 most relevant
+                    "strategy": search_strategy,
+                    "method": "dynamic_reasoning_search"
+                }
+                logger.info(f"✅ Total relevant results: {len(all_results[:10])}")
             else:
-                error = result.get("error", "Unknown error")
-                logger.warning(f"⚠️ Search failed: {error}")
-                # Continue anyway - LLM can still create good reports
+                logger.warning("⚠️ No relevant results found - will use LLM knowledge")
 
             return True
 
@@ -118,21 +145,6 @@ class ManusActionExecutor:
         """Execute default action"""
         logger.info(f"🔧 DEFAULT ACTION: {step}")
         return True
-
-    def _extract_search_query(self) -> Optional[str]:
-        """Extract search query from user message"""
-        user_message = self._get_user_message()
-
-        if "air india" in user_message and "crash" in user_message:
-            return "air india crash official report investigation details"
-        elif "crypto" in user_message:
-            return "cryptocurrency market analysis latest news"
-        elif "news" in user_message:
-            return "latest breaking news analysis"
-        else:
-            # Generic query based on user request
-            words = user_message.split()[:5]  # First 5 words
-            return " ".join(words) + " official report analysis"
 
     def _get_user_message(self) -> str:
         """Get the user's original request"""
@@ -264,17 +276,35 @@ Use the specific information provided in the search results above to create a fa
 Generate the complete report now:"""
 
     def _determine_filename(self, user_message: str) -> str:
-        """Determine appropriate filename"""
+        """Determine appropriate filename based on content and search strategy"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        if "air india" in user_message and "crash" in user_message:
-            return f"air_india_crash_analysis_report_{timestamp}.md"
-        elif "crypto" in user_message:
-            return f"crypto_analysis_report_{timestamp}.md"
-        elif "news" in user_message:
-            return f"news_analysis_report_{timestamp}.md"
+        
+        # Get the search strategy for context
+        search_context = ""
+        if self.last_search_results and self.last_search_results.get("strategy"):
+            strategy = self.last_search_results["strategy"]
+            if strategy.get("location_specific") and strategy.get("target_region"):
+                search_context = f"_{strategy['target_region']}"
+        
+        # Dynamic filename based on user request
+        user_lower = user_message.lower()
+        
+        if "air india" in user_lower and "crash" in user_lower:
+            return f"air_india_crash_analysis_report{search_context}_{timestamp}.md"
+        elif "crypto" in user_lower or "bitcoin" in user_lower:
+            return f"crypto_analysis_report{search_context}_{timestamp}.md"
+        elif "nepal" in user_lower:
+            return f"nepal_news_analysis_report_{timestamp}.md"
+        elif "india" in user_lower:
+            return f"india_news_analysis_report_{timestamp}.md"
+        elif "technology" in user_lower or "tech" in user_lower:
+            return f"technology_analysis_report{search_context}_{timestamp}.md"
+        elif "business" in user_lower or "finance" in user_lower:
+            return f"business_analysis_report{search_context}_{timestamp}.md"
+        elif "news" in user_lower:
+            return f"news_analysis_report{search_context}_{timestamp}.md"
         else:
-            return f"analysis_report_{timestamp}.md"
+            return f"analysis_report{search_context}_{timestamp}.md"
 
     def _save_document(self, filename: str, content: str) -> str:
         """Save document to workspace"""
@@ -285,3 +315,162 @@ Generate the complete report now:"""
             f.write(content)
 
         return workspace_path
+
+    async def _analyze_user_intent_and_generate_search_strategy(self) -> Optional[Dict]:
+        """Use LLM to analyze user intent and generate dynamic search strategy"""
+        try:
+            user_message = self._get_user_message()
+            
+            prompt = f"""
+            Analyze this user request and generate an optimal search strategy:
+            
+            User Request: "{user_message}"
+            
+            Please provide a JSON response with:
+            1. "intent" - what the user is looking for (location, topic, timeframe, etc.)
+            2. "queries" - list of 2-3 specific search queries to find relevant information
+            3. "approach" - brief description of the search strategy
+            
+            For location-specific news (like Nepal), include:
+            - Country/region name + "news today"
+            - Country/region name + "latest headlines" 
+            - Specific news sources from that region if known
+            
+            Example for "top 5 news of nepal today":
+            {{
+                "intent": {{
+                    "location": "Nepal",
+                    "topic": "general news",
+                    "timeframe": "today",
+                    "count": 5
+                }},
+                "queries": [
+                    "Nepal news today headlines",
+                    "Nepal latest breaking news",
+                    "Kathmandu Post headlines today"
+                ],
+                "approach": "Location-specific news search with multiple sources"
+            }}
+            
+            Respond with only the JSON object:
+            """
+            
+            if not self.llm:
+                logger.warning("No LLM available for intent analysis")
+                return None
+                
+            response = await self.llm.ask(prompt)
+            
+            # Extract JSON from response
+            
+            # Try to find JSON in the response
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                try:
+                    strategy = json.loads(json_match.group())
+                    logger.info(f"🧠 Generated search strategy: {strategy.get('approach', 'Unknown')}")
+                    return strategy
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse LLM response as JSON: {e}")
+                    
+            # Fallback strategy
+            return self._generate_fallback_strategy(user_message)
+            
+        except Exception as e:
+            logger.error(f"Failed to analyze user intent: {e}")
+            return self._generate_fallback_strategy(user_message)
+
+    def _generate_fallback_strategy(self, user_message: str) -> Dict:
+        """Generate a basic search strategy when LLM analysis fails"""
+        strategy = {
+            "intent": {"topic": "general", "timeframe": "recent"},
+            "queries": [],
+            "approach": "fallback_strategy"
+        }
+        
+        # Extract key terms for fallback queries
+        user_lower = user_message.lower()
+        
+        # Country detection
+        countries = ["nepal", "india", "china", "usa", "uk", "canada", "australia", "japan"]
+        detected_country = None
+        for country in countries:
+            if country in user_lower:
+                detected_country = country
+                break
+        
+        if detected_country:
+            strategy["intent"]["location"] = detected_country
+            strategy["queries"] = [
+                f"{detected_country} news today",
+                f"{detected_country} latest headlines",
+                f"{detected_country} breaking news"
+            ]
+        else:
+            # General search
+            words = user_message.split()[:4]
+            base_query = " ".join(words)
+            strategy["queries"] = [
+                f"{base_query} latest news",
+                f"{base_query} headlines today",
+                f"{base_query} breaking news"
+            ]
+            
+        return strategy
+
+    async def _filter_results_by_intent(self, results: List[Dict], intent: Dict) -> List[Dict]:
+        """Filter search results based on user intent using LLM reasoning"""
+        if not results or not self.llm:
+            return results
+            
+        try:
+            # Prepare results summary for LLM
+            results_summary = []
+            for i, result in enumerate(results[:10]):  # Limit to avoid token limit
+                results_summary.append({
+                    "index": i,
+                    "title": result.get("title", ""),
+                    "snippet": result.get("snippet", "")[:200],  # Truncate snippet
+                    "source": result.get("source", "")
+                })
+            
+            prompt = f"""
+            Filter these search results based on user intent:
+            
+            User Intent: {intent}
+            
+            Search Results:
+            {json.dumps(results_summary, indent=2)}
+            
+            Return only the indices (numbers) of results that are most relevant to the user's intent.
+            Consider:
+            - Location relevance (if specified)
+            - Topic relevance
+            - Recency (if timeframe specified)
+            - Source credibility
+            
+            Respond with just a list of numbers, e.g.: [0, 2, 5, 7]
+            """
+            
+            response = await self.llm.ask(prompt)
+            
+            # Extract indices from response
+            indices_match = re.search(r'\[([\d,\s]+)\]', response)
+            if indices_match:
+                indices_str = indices_match.group(1)
+                indices = [int(x.strip()) for x in indices_str.split(',') if x.strip().isdigit()]
+                
+                # Return filtered results
+                filtered_results = []
+                for idx in indices:
+                    if 0 <= idx < len(results):
+                        filtered_results.append(results[idx])
+                
+                logger.info(f"🎯 Filtered {len(results)} results down to {len(filtered_results)} relevant ones")
+                return filtered_results
+            
+        except Exception as e:
+            logger.warning(f"Failed to filter results with LLM: {e}")
+        
+        # Fallback: return all results with basic filtering
+        return results
