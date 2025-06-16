@@ -183,9 +183,18 @@ class Manus(ToolCallAgent):
             current_step = await self.utils_module._get_current_step()
 
             # This should never happen now due to validation, but keep as safety
-            if not current_phase or not current_step:
-                logger.error("No valid phase or step found in plan")
-                return False
+            if (
+                not current_phase
+                or not current_step
+                or current_step == "phase_complete"
+            ):
+                if current_step == "phase_complete":
+                    logger.info("Phase completed, progressing to next phase")
+                    await self.utils_module.progress_to_next_phase()
+                    return True
+                else:
+                    logger.error("No valid phase or step found in plan")
+                    return False
 
             url = await self._extract_url_from_request(current_step)
             if url:

@@ -337,22 +337,15 @@ class OptimizedBulletproofSearch:
         """
         relevance = 0
 
-        # For general news queries, give base relevance to all current news
+        # Check for general news terms
+        news_terms = ["news", "latest", "today", "breaking", "current", "update"]
         query_lower = query.lower()
-        if any(
-            term in query_lower
-            for term in ["news", "latest", "today", "breaking", "current"]
-        ):
-            relevance += 4  # Higher base score for general news queries
-
-        # Check for general news terms in content
-        news_terms = ["today", "breaking", "latest", "current", "update", "report"]
         title_lower = title.lower()
         summary_lower = summary.lower()
 
-        # Base relevance for any news content when looking for "news"
+        # Base relevance for news content
         if any(term in title_lower or term in summary_lower for term in news_terms):
-            relevance += 2
+            relevance += 3
 
         # Check for topic matches
         for topic_list in main_topics.values():
@@ -367,6 +360,6 @@ class OptimizedBulletproofSearch:
             term in title_lower or term in summary_lower
             for term in ["today", "2025", "june"]
         ):
-            relevance += 1
+            relevance += 2
 
         return min(relevance, 10)  # Cap at 10
