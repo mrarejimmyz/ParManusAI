@@ -18,7 +18,7 @@ from app.schema import Message, ToolChoice
 
 class TokenCounter:
     """Token counter for tracking usage."""
-    
+
     def __init__(self):
         self.prompt_tokens = 0
         self.completion_tokens = 0
@@ -61,8 +61,10 @@ class OllamaLLM:
 
         # Vision client (if different from main client)
         if self.vision_enabled and self.vision_settings:
-            if (self.vision_settings.base_url != self.base_url or 
-                self.vision_settings.api_key != self.api_key):
+            if (
+                self.vision_settings.base_url != self.base_url
+                or self.vision_settings.api_key != self.api_key
+            ):
                 self.vision_client = AsyncOpenAI(
                     base_url=self.vision_settings.base_url,
                     api_key=self.vision_settings.api_key,
@@ -74,24 +76,32 @@ class OllamaLLM:
         if self.vision_enabled:
             logger.info(f"Vision enabled with model: {self.vision_settings.model}")
 
-    def _format_messages(self, messages: List[Union[Message, Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    def _format_messages(
+        self, messages: List[Union[Message, Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
         """Format messages for OpenAI API."""
         formatted_messages = []
-        
+
         for msg in messages:
             if isinstance(msg, Message):
                 msg_dict = msg.to_dict()
+            elif isinstance(msg, dict):
+                msg_dict = msg.copy()  # Make a copy to avoid modifying original
+            elif isinstance(msg, str):
+                # Handle string messages by converting to proper format
+                msg_dict = {"role": "user", "content": msg}
             else:
-                msg_dict = msg
-            
+                # Handle other types by converting to string content
+                msg_dict = {"role": "user", "content": str(msg)}
+
             # Ensure required fields
             if "role" not in msg_dict:
                 msg_dict["role"] = "user"
             if "content" not in msg_dict:
                 msg_dict["content"] = ""
-            
+
             formatted_messages.append(msg_dict)
-        
+
         return formatted_messages
 
     async def ask(
@@ -106,7 +116,7 @@ class OllamaLLM:
         try:
             # Format messages
             formatted_messages = []
-            
+
             # Add system messages first
             if system_msgs:
                 for sys_msg in system_msgs:
@@ -116,34 +126,33 @@ class OllamaLLM:
                         sys_dict = sys_msg
                     sys_dict["role"] = "system"
                     formatted_messages.append(sys_dict)
-            
+
             # Add user messages
             formatted_messages.extend(self._format_messages(messages))
-            
+
             # Use provided temperature or default
             temperature = temp if temp is not None else self.temperature
-            
+
             # Make API call
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=formatted_messages,
                 max_tokens=self.max_tokens,
                 temperature=temperature,
-                **kwargs
+                **kwargs,
             )
-            
+
             # Extract response text
             content = response.choices[0].message.content
-            
+
             # Update token counter if usage info is available
-            if hasattr(response, 'usage') and response.usage:
+            if hasattr(response, "usage") and response.usage:
                 self.token_counter.update(
-                    response.usage.prompt_tokens,
-                    response.usage.completion_tokens
+                    response.usage.prompt_tokens, response.usage.completion_tokens
                 )
-            
+
             return content
-            
+
         except Exception as e:
             logger.error(f"Error in Ollama LLM ask: {str(e)}")
             raise
@@ -163,7 +172,7 @@ class OllamaLLM:
         try:
             # Format messages
             formatted_messages = []
-            
+
             # Add system messages first
             if system_msgs:
                 for sys_msg in system_msgs:
@@ -173,13 +182,13 @@ class OllamaLLM:
                         sys_dict = sys_msg
                     sys_dict["role"] = "system"
                     formatted_messages.append(sys_dict)
-            
+
             # Add user messages
             formatted_messages.extend(self._format_messages(messages))
-            
+
             # Use provided temperature or default
             temperature = temp if temp is not None else self.temperature
-            
+
             # Prepare tool choice
             tool_choice_param = None
             if tool_choice == ToolChoice.AUTO:
@@ -188,60 +197,69 @@ class OllamaLLM:
                 tool_choice_param = "required"
             elif tool_choice == ToolChoice.NONE:
                 tool_choice_param = "none"
-            
+
             # Make API call with tools
             call_params = {
                 "model": self.model,
                 "messages": formatted_messages,
                 "max_tokens": self.max_tokens,
                 "temperature": temperature,
-                **kwargs
+                **kwargs,
             }
-            
+
             if tools:
                 call_params["tools"] = tools
                 if tool_choice_param:
                     call_params["tool_choice"] = tool_choice_param
-            
+
             response = await self.client.chat.completions.create(**call_params)
-            
+
             # Extract response
             message = response.choices[0].message
             content = message.content or ""
             tool_calls = message.tool_calls or []
-            
+
             # Update token counter if usage info is available
-            if hasattr(response, 'usage') and response.usage:
+            if hasattr(response, "usage") and response.usage:
                 self.token_counter.update(
-                    response.usage.prompt_tokens,
-                    response.usage.completion_tokens
+                    response.usage.prompt_tokens, response.usage.completion_tokens
                 )
-            
+
             # Format tool calls
             formatted_tool_calls = []
             for tool_call in tool_calls:
                 # Handle both object and dict formats with proper error handling
                 try:
-                    if hasattr(tool_call, 'id'):
+                    if hasattr(tool_call, "id"):
                         # Object format
-                        formatted_tool_calls.append({
-                            "id": tool_call.id,
-                            "type": "function",
-                            "function": {
-                                "name": tool_call.function.name,
-                                "arguments": tool_call.function.arguments
+                        formatted_tool_calls.append(
+                            {
+                                "id": tool_call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call.function.name,
+                                    "arguments": tool_call.function.arguments,
+                                },
                             }
-                        })
+                        )
                     elif isinstance(tool_call, dict):
                         # Dict format - ensure proper structure
-                        formatted_tool_calls.append({
-                            "id": tool_call.get('id', f"call_{len(formatted_tool_calls)}"),
-                            "type": "function",
-                            "function": {
-                                "name": tool_call.get('function', {}).get('name', ''),
-                                "arguments": tool_call.get('function', {}).get('arguments', '{}')
+                        formatted_tool_calls.append(
+                            {
+                                "id": tool_call.get(
+                                    "id", f"call_{len(formatted_tool_calls)}"
+                                ),
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call.get("function", {}).get(
+                                        "name", ""
+                                    ),
+                                    "arguments": tool_call.get("function", {}).get(
+                                        "arguments", "{}"
+                                    ),
+                                },
                             }
-                        })
+                        )
                     else:
                         # Handle malformed tool call
                         logger.warning(f"Malformed tool call: {tool_call}")
@@ -249,25 +267,36 @@ class OllamaLLM:
                 except AttributeError as e:
                     logger.error(f"Error processing tool call {tool_call}: {e}")
                     # Create a fallback tool call with generated ID
-                    formatted_tool_calls.append({
-                        "id": f"call_{len(formatted_tool_calls)}",
-                        "type": "function",
-                        "function": {
-                            "name": str(tool_call),
-                            "arguments": "{}"
+                    formatted_tool_calls.append(
+                        {
+                            "id": f"call_{len(formatted_tool_calls)}",
+                            "type": "function",
+                            "function": {"name": str(tool_call), "arguments": "{}"},
                         }
-                    })
-            
+                    )
+
             return {
                 "content": content,
                 "tool_calls": formatted_tool_calls,
                 "usage": {
-                    "prompt_tokens": getattr(response.usage, 'prompt_tokens', 0) if hasattr(response, 'usage') else 0,
-                    "completion_tokens": getattr(response.usage, 'completion_tokens', 0) if hasattr(response, 'usage') else 0,
-                    "total_tokens": getattr(response.usage, 'total_tokens', 0) if hasattr(response, 'usage') else 0,
-                }
+                    "prompt_tokens": (
+                        getattr(response.usage, "prompt_tokens", 0)
+                        if hasattr(response, "usage")
+                        else 0
+                    ),
+                    "completion_tokens": (
+                        getattr(response.usage, "completion_tokens", 0)
+                        if hasattr(response, "usage")
+                        else 0
+                    ),
+                    "total_tokens": (
+                        getattr(response.usage, "total_tokens", 0)
+                        if hasattr(response, "usage")
+                        else 0
+                    ),
+                },
             }
-            
+
         except Exception as e:
             logger.error(f"Error in Ollama LLM ask_tool: {str(e)}")
             raise
@@ -284,11 +313,11 @@ class OllamaLLM:
         """Ask the vision model with image support."""
         if not self.vision_enabled or not self.vision_settings:
             raise ValueError("Vision is not enabled or configured")
-        
+
         try:
             # Format messages
             formatted_messages = []
-            
+
             # Add system messages first
             if system_msgs:
                 for sys_msg in system_msgs:
@@ -298,54 +327,52 @@ class OllamaLLM:
                         sys_dict = sys_msg
                     sys_dict["role"] = "system"
                     formatted_messages.append(sys_dict)
-            
+
             # Add user messages with images
             for msg in messages:
                 if isinstance(msg, Message):
                     msg_dict = msg.to_dict()
                 else:
                     msg_dict = msg
-                
+
                 # If images are provided, add them to the content
                 if images and msg_dict.get("role") == "user":
                     content = []
                     if msg_dict.get("content"):
                         content.append({"type": "text", "text": msg_dict["content"]})
-                    
+
                     for image in images:
-                        content.append({
-                            "type": "image_url",
-                            "image_url": {"url": image}
-                        })
-                    
+                        content.append(
+                            {"type": "image_url", "image_url": {"url": image}}
+                        )
+
                     msg_dict["content"] = content
-                
+
                 formatted_messages.append(msg_dict)
-            
+
             # Use provided temperature or vision model default
             temperature = temp if temp is not None else self.vision_settings.temperature
-            
+
             # Make API call to vision model
             response = await self.vision_client.chat.completions.create(
                 model=self.vision_settings.model,
                 messages=formatted_messages,
                 max_tokens=self.vision_settings.max_tokens,
                 temperature=temperature,
-                **kwargs
+                **kwargs,
             )
-            
+
             # Extract response text
             content = response.choices[0].message.content
-            
+
             # Update token counter if usage info is available
-            if hasattr(response, 'usage') and response.usage:
+            if hasattr(response, "usage") and response.usage:
                 self.token_counter.update(
-                    response.usage.prompt_tokens,
-                    response.usage.completion_tokens
+                    response.usage.prompt_tokens, response.usage.completion_tokens
                 )
-            
+
             return content
-            
+
         except Exception as e:
             logger.error(f"Error in Ollama LLM ask_vision: {str(e)}")
             raise
@@ -365,4 +392,3 @@ class OllamaLLM:
 
 # Alias for backward compatibility
 LLM = OllamaLLM
-

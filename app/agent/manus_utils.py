@@ -188,12 +188,98 @@ class ManusUtils:
                 )
                 return False
 
-            # Count markdown files (reports) in workspace
+            # Get current task description for filtering
+            current_task = ""
+            try:
+                if hasattr(self.agent, "state") and hasattr(
+                    self.agent.state, "messages"
+                ):
+                    for message in reversed(self.agent.state.messages):
+                        if hasattr(message, "role") and message.role == "user":
+                            if hasattr(message, "content") and isinstance(
+                                message.content, str
+                            ):
+                                current_task = message.content
+                                break
+
+                # Also try todo.md
+                if not current_task:
+                    todo_path = os.path.join(workspace_path, "todo.md")
+                    if os.path.exists(todo_path):
+                        with open(todo_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                            import re
+
+                            goal_match = re.search(r"\*\*Goal:\*\*\s*(.+)", content)
+                            if goal_match:
+                                current_task = goal_match.group(1).strip()
+            except Exception as e:
+                logger.debug(f"Could not extract current task: {e}")
+
+            # Count markdown files (reports) in workspace - filter by relevance to current task
             md_files = []
+            task_keywords = []
+            if current_task:
+                # Extract keywords from current task
+                import re
+
+                words = re.findall(r"\b\w+\b", current_task.lower())
+                common_words = {
+                    "the",
+                    "a",
+                    "an",
+                    "and",
+                    "or",
+                    "but",
+                    "in",
+                    "on",
+                    "at",
+                    "to",
+                    "for",
+                    "of",
+                    "with",
+                    "by",
+                }
+                task_keywords = [
+                    word for word in words if len(word) > 3 and word not in common_words
+                ][:3]
+                logger.info(f"🔍 Looking for reports related to: {current_task}")
+                logger.info(f"🔍 Task keywords: {task_keywords}")
+
             for root, dirs, files in os.walk(workspace_path):
                 for file in files:
                     if file.endswith(".md") and file != "todo.md":
-                        md_files.append(os.path.join(root, file))
+                        filepath = os.path.join(root, file)
+
+                        # If we have a current task, filter by relevance
+                        if task_keywords:
+                            filename_lower = file.lower()
+                            keyword_matches = sum(
+                                1
+                                for keyword in task_keywords
+                                if keyword in filename_lower
+                            )
+
+                            # Also check file creation time (reports created in last 2 hours are likely relevant)
+                            try:
+                                file_time = os.path.getmtime(filepath)
+                                import time
+
+                                current_time = time.time()
+                                is_recent = (current_time - file_time) < 7200  # 2 hours
+
+                                if keyword_matches >= 1 or is_recent:
+                                    md_files.append(filepath)
+                                    logger.info(
+                                        f"✅ Found relevant report: {file} (keywords: {keyword_matches}, recent: {is_recent})"
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Error checking file time for {file}: {e}"
+                                )
+                        else:
+                            # No current task context, include all reports
+                            md_files.append(filepath)
 
             if md_files:
                 logger.info(

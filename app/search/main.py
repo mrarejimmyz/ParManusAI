@@ -18,7 +18,7 @@ class LLMDrivenSearch:
 
     def __init__(self, llm=None):
         self.analyzer = SearchStrategyAnalyzer(llm)
-        self.executor = SearchExecutor()
+        self.executor = SearchExecutor(llm)  # Pass LLM to executor
 
     async def search(self, query: str) -> Dict:
         """

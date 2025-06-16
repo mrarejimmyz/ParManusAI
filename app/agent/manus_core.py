@@ -98,7 +98,8 @@ class Manus(ToolCallAgent):
         self.deep_reasoning_enabled = True
 
         self.planning_module = ManusPlanning(self)
-        self.llm_planner = LLMDrivenPlanner(llm=self.llm)  # New LLM-driven planner
+        # Initialize LLM planner without LLM for now - will be set later
+        self.llm_planner = None
         self.browser_handler = ManusBrowserHandler(self)
         self.utils_module = ManusUtils(self)
 
@@ -106,6 +107,11 @@ class Manus(ToolCallAgent):
             "🧠 ENHANCED AI SYSTEM INITIALIZED: Deep reasoning and learning enabled"
         )
         logger.debug("Manus __init__ completed.")
+
+    def _ensure_llm_planner(self):
+        """Ensure LLM planner is initialized with the current LLM."""
+        if self.llm_planner is None and self.llm is not None:
+            self.llm_planner = LLMDrivenPlanner(llm=self.llm)
 
     @classmethod
     async def create(cls, **kwargs):
@@ -120,9 +126,114 @@ class Manus(ToolCallAgent):
             logger.error(f"Error during Manus.create: {e}", exc_info=True)
             raise
 
+    async def _is_simple_query(self, user_request: str) -> bool:
+        """Detect if this is a simple query that doesn't need complex planning."""
+        simple_patterns = [
+            # Mathematical questions
+            r"\b\d+\s*[\+\-\*\/]\s*\d+",
+            r"what\s+is\s+\d+",
+            r"calculate",
+            r"math",
+            # Simple factual questions
+            r"^what\s+is\s+(?:your\s+)?name",
+            r"^who\s+are\s+you",
+            r"^what\s+can\s+you\s+do",
+            r"^hello",
+            r"^hi\b",
+            # Quick recommendations that can be answered from knowledge
+            r"^name\s+\d+\s+\w+\s+to\s+(?:invest|buy|use)",
+            r"^recommend\s+(?:a|one|\d+)",
+            r"^suggest\s+(?:a|one|\d+)",
+            r"^what\s+(?:is\s+)?(?:the\s+)?best\s+\w+",
+            # Simple explanations
+            r"^explain\s+\w+\s+in\s+\w+\s+words",
+            r"^define\s+\w+",
+            r"^what\s+does\s+\w+\s+mean",
+        ]
+
+        import re
+
+        request_lower = user_request.lower().strip()
+
+        for pattern in simple_patterns:
+            if re.search(pattern, request_lower):
+                return True
+
+        # Check for short queries (likely simple)
+        if len(request_lower.split()) <= 6:
+            simple_keywords = [
+                "what",
+                "who",
+                "when",
+                "where",
+                "how",
+                "why",
+                "is",
+                "are",
+                "can",
+                "do",
+                "does",
+            ]
+            if any(request_lower.startswith(kw) for kw in simple_keywords):
+                return True
+
+        return False
+
+    async def _handle_simple_query(self, user_request: str) -> str:
+        """Handle simple queries directly with LLM without complex planning."""
+        logger.info(f"🚀 Handling simple query directly: {user_request}")
+
+        # Ensure LLM is available
+        if not self.llm:
+            return "I need an LLM to answer your question."
+
+        # Create a focused prompt for simple queries
+        simple_prompt = f"""You are Manus, a helpful AI assistant. The user has asked a simple, direct question that needs a clear, concise answer.
+
+User question: {user_request}
+
+Please provide a direct, helpful answer. If this is asking for a recommendation (like crypto to invest), provide ONE specific recommendation with a brief reason why. Keep your response concise and actionable.
+
+If you cannot provide a specific recommendation due to lack of current market data, clearly state this limitation and provide general guidance instead."""
+
+        try:
+            response = await self.llm.ask([{"role": "user", "content": simple_prompt}])
+            return response
+        except Exception as e:
+            logger.error(f"Error in simple query handling: {e}")
+            return f"I encountered an error while processing your question: {str(e)}"
+
     async def create_task_plan(self, user_request: str) -> Dict:
         """Create comprehensive task plan using LLM-driven planner"""
         logger.info(f"🎯 Creating LLM-driven comprehensive plan for: {user_request}")
+
+        # Ensure LLM planner is initialized
+        self._ensure_llm_planner()
+
+        if self.llm_planner is None:
+            logger.warning("LLM planner not available, using legacy planning only")
+            return await self.planning_module.create_task_plan(user_request)
+
+        # Check if it's a simple query that can be handled directly
+        is_simple = await self._is_simple_query(user_request)
+        if is_simple:
+            logger.info("Detected simple query, handling directly without planning")
+            response = await self._handle_simple_query(user_request)
+            return {
+                "phases": [
+                    {
+                        "steps": [
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "respond",
+                                    "arguments": {"response": response},
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }
 
         # Use the new LLM-driven planner for all requests
         plan = await self.llm_planner.create_comprehensive_plan(user_request)
@@ -148,6 +259,40 @@ class Manus(ToolCallAgent):
 
     async def _initialize_browser_state(self):
         return await self.browser_handler._initialize_browser_state()
+
+    async def get_current_report_guidance(self) -> str:
+        """Get guidance on what needs to be completed in the current report"""
+        try:
+            if not hasattr(self, "action_executor"):
+                return "No active action executor"
+
+            status = self.action_executor.get_current_report_status()
+
+            if "error" in status:
+                return f"Report status error: {status['error']}"
+
+            completion_pct = status.get("completion_percentage", 0)
+            completed_sections = status.get("completed_sections", 0)
+            total_sections = status.get("total_sections", 0)
+            missing_sections = status.get("missing_sections", [])
+            placeholder_sections = status.get("placeholder_sections", [])
+
+            guidance = f"Current report is {completion_pct:.1f}% complete ({completed_sections}/{total_sections} sections).\n"
+
+            if placeholder_sections:
+                guidance += f"Priority: Replace placeholders in {', '.join(placeholder_sections[:3])}\n"
+
+            if missing_sections:
+                guidance += f"Still needed: {', '.join(missing_sections[:3])}\n"
+
+            if completion_pct < 50:
+                guidance += "Focus on Executive Summary and Key Findings first."
+
+            return guidance
+
+        except Exception as e:
+            logger.error(f"Error getting report guidance: {e}")
+            return "Could not get report guidance"
 
     async def _verify_deliverable_creation(self, current_step: str) -> bool:
         """
@@ -300,9 +445,7 @@ class Manus(ToolCallAgent):
 
             # Initialize action executor if not already done
             if not hasattr(self, "action_executor"):
-                from app.agent.manus_action_executor_enhanced_clean import (
-                    ManusActionExecutor,
-                )
+                from app.agent.manus_action_executor_improved import ManusActionExecutor
 
                 self.action_executor = ManusActionExecutor(self)
 
@@ -383,6 +526,8 @@ class Manus(ToolCallAgent):
                         current_step
                     )
                     if deliverable_verified:
+                        # Update report completion status after creation
+                        self.action_executor.update_report_completion()
                         success = await self.utils_module.progress_to_next_step(
                             verified=True
                         )
@@ -441,7 +586,7 @@ class Manus(ToolCallAgent):
     async def step(self) -> str:
         """Execute a single step, creating a plan if needed"""
         try:
-            # On first step, create plan if none exists
+            # On first step, check for simple queries BEFORE creating complex plans
             if self.current_step == 1 and not self.current_plan:
                 # Get the last user request from memory
                 user_messages = [
@@ -451,6 +596,17 @@ class Manus(ToolCallAgent):
                     raise ValueError("No user request found in memory")
 
                 request = user_messages[-1].content
+
+                # Check if this is a simple query that can be handled directly
+                is_simple = await self._is_simple_query(request)
+                if is_simple:
+                    logger.info("🚀 Simple query detected - providing direct response")
+                    response = await self._handle_simple_query(request)
+                    # Mark task as complete and return the response
+                    self.state = AgentState.FINISHED
+                    return f"Direct response: {response}"
+
+                # If not simple, proceed with normal planning
                 self.current_plan = await self.create_task_plan(request)
                 await self.create_todo_list(self.current_plan)
                 return "Created initial task plan"

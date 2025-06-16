@@ -12,6 +12,7 @@ from .actions import (
     ScrollHandler,
     TabHandler,
 )
+from .modern_tool import ModernBrowserTool
 from .router import BrowserActionRouter
 from .state import BrowserStateManager
 
@@ -24,4 +25,5 @@ __all__ = [
     "ScrollHandler",
     "TabHandler",
     "ExtractionHandler",
+    "ModernBrowserTool",
 ]
