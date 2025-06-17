@@ -38,13 +38,13 @@ Create a focused, specific search query that will find relevant and current info
 GUIDELINES:
 1. Extract the core topic/subject from the task
 2. Include relevant keywords and entities
-3. Add current year (2024/2025) if it's about recent events
+3. Add current year (2025) if it's about recent events
 4. Make it specific enough to avoid irrelevant results
 5. Keep it concise but comprehensive
 
 EXAMPLES:
-- Task: "why are trump and elon musk fighting now" → "Trump Elon Musk conflict dispute 2024 2025"
-- Task: "recession status analysis" → "US recession indicators 2024 economic status"
+- Task: "why are trump and elon musk fighting now" → "Trump Elon Musk conflict dispute 2025"
+- Task: "recession status analysis" → "US recession indicators 2025 economic status"
 - Task: "why gold cannot be counted at fort knox by elon musk DOGE" → "Fort Knox gold audit DOGE Elon Musk government efficiency"
 
 OUTPUT: Return ONLY the search query, nothing else."""
@@ -105,9 +105,9 @@ OUTPUT: Return ONLY the search query, nothing else."""
             }
 
             words = re.findall(r"\b\w+\b", task_description.lower())
-            meaningful_words = [w for w in words if w not in stop_words and len(w) > 2]
-
-            # Take the first 5-6 meaningful words
+            meaningful_words = [
+                w for w in words if w not in stop_words and len(w) > 2
+            ]  # Take the first 5-6 meaningful words
             search_terms = meaningful_words[:6]
 
             # Add current year for recent topics
@@ -116,11 +116,11 @@ OUTPUT: Return ONLY the search query, nothing else."""
                 word in task_description.lower()
                 for word in ["current", "now", "recent", "today", "latest"]
             ):
-                search_query += " 2024 2025"
+                search_query += " 2025"
 
             logger.info(f"🔄 Fallback search query: '{search_query}'")
             return search_query
 
         except Exception as e:
             logger.error(f"Error in fallback search query: {e}")
-            return "current news analysis 2024"
+            return "current news analysis 2025"

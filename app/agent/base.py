@@ -330,6 +330,16 @@ class BaseAgent(BaseModel, ABC):
                     self.performance_metrics["successful_steps"] += 1
                     self.circuit_breaker.call_succeeded()
 
+                    # Automatically update todo.md progress for agents that support it
+                    if hasattr(self, 'update_todo_progress') and callable(getattr(self, 'update_todo_progress')):
+                        try:
+                            logger.debug(f"Updating todo.md progress after step {self.current_step}")
+                            await self.update_todo_progress()
+                            logger.debug("Todo.md progress updated successfully")
+                        except Exception as todo_error:
+                            # Don't fail the step if todo update fails, just log it
+                            logger.warning(f"Failed to update todo.md progress: {todo_error}")
+
                     # Skip stuck detection for completed tasks
                     if self.state != AgentState.FINISHED:
                         # Add to stuck detector

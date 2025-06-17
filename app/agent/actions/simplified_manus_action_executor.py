@@ -4,7 +4,7 @@ Streamlined version with focused functionality using comprehensive modular compo
 """
 
 import os
-from typing import List
+from typing import List, Optional
 
 from app.agent.reporting.utils.report_completion_analyzer import (
     ReportCompletionAnalyzer,
@@ -100,13 +100,41 @@ class SimplifiedManusActionExecutor:
             # Get search results if available
             search_results = []
             if self.last_search_results and self.last_search_results.get("results"):
-                search_results = self.last_search_results["results"]
+                search_results = self.last_search_results[
+                    "results"
+                ]  # Check for existing report to avoid duplicates
+            existing_report = self._find_existing_report(self.current_task)
+            if existing_report:
+                logger.info(
+                    f"📄 Found existing report: {os.path.basename(existing_report)}"
+                )
 
-            # Create report using comprehensive report manager
-            logger.info("🧠 Creating intelligent report")
-            report_path = await self.report_manager.create_llm_driven_report(
-                self.current_task, search_results
-            )
+                # Check if it needs completion
+                analysis = self.completion_analyzer.analyze_report_completeness(
+                    existing_report
+                )
+                completion_pct = analysis.get("completion_percentage", 0)
+
+                if completion_pct < 90:
+                    logger.info(
+                        f"📝 Report is {completion_pct:.1f}% complete, enhancing it..."
+                    )
+                    success = await self.complete_incomplete_report(existing_report)
+                    if success:
+                        logger.info("✅ Successfully enhanced existing report")
+                        return True
+                else:
+                    logger.info("✅ Existing report is already complete, using it")
+                    # Update our tracking
+                    self.report_name = os.path.basename(existing_report)
+                    report_path = existing_report
+                    return True
+            else:
+                # Create report using comprehensive report manager
+                logger.info("🧠 Creating new intelligent report")
+                report_path = await self.report_manager.create_llm_driven_report(
+                    self.current_task, search_results
+                )
 
             # Add completion analysis
             self._add_completion_analysis(report_path)
@@ -381,10 +409,88 @@ class SimplifiedManusActionExecutor:
 - Repository file structure mapping
 - Dependency analysis from requirements.txt
 - Configuration template analysis
-- Documentation completeness assessment"""
+- Documentation completeness assessment"""  # =============================================================================
 
-    # =============================================================================
     # Utility method for search query generation fallback
     async def _generate_search_query(self, task_description: str, step: str) -> str:
         """Generate search query (compatibility method)"""
         return await self.query_generator.generate_query(task_description, step)
+
+    def _find_existing_report(self, task_description: str) -> Optional[str]:
+        """Find existing report for the same task to avoid duplicates"""
+        try:
+            import glob
+            import os
+
+            # Clean task description to match naming convention
+            clean_task = self._clean_task_for_search(task_description)
+
+            # Search for reports with similar task names - use a more flexible pattern
+            workspace_path = getattr(self.agent, "workspace_root", "workspace")
+
+            # Try multiple search patterns to find existing reports
+            patterns = [
+                os.path.join(workspace_path, f"*{clean_task}*.md"),
+                os.path.join(
+                    workspace_path, f"*analyze*github*repository*.md"
+                ),  # More specific for GitHub tasks
+                os.path.join(
+                    workspace_path, f"analysis_analyze*.md"
+                ),  # General analysis reports
+            ]
+
+            existing_files = []
+            for pattern in patterns:
+                existing_files.extend(glob.glob(pattern))
+
+            # Remove duplicates and filter out todo.md
+            unique_files = list(set(existing_files))
+            report_files = [f for f in unique_files if not f.endswith("todo.md")]
+
+            if report_files:
+                # Return the most recently modified file
+                latest_report = max(report_files, key=os.path.getmtime)
+                logger.info(
+                    f"📄 Found existing report: {os.path.basename(latest_report)}"
+                )
+                return latest_report
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"Could not search for existing reports: {e}")
+            return None
+
+    def _clean_task_for_search(self, task_description: str) -> str:
+        """Clean task description for search pattern matching"""
+        import re
+
+        # Take key words from the task
+        words = re.findall(r"\b\w+\b", task_description.lower())
+
+        # Keep important words, skip common ones
+        important_words = []
+        skip_words = {
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+        }
+
+        for word in words:
+            if len(word) > 3 and word not in skip_words:
+                important_words.append(word)
+                if len(important_words) >= 3:  # Take first 3 key words
+                    break
+
+        return "_".join(important_words) if important_words else "report"
