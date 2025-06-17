@@ -260,6 +260,7 @@ class BrowserUseTool(Generic[Context], BaseTool):
                     "chrome_instance_path",
                     "wss_url",
                     "cdp_url",
+                    "window_size",
                 ]
 
                 for attr in browser_attrs:
@@ -281,7 +282,7 @@ class BrowserUseTool(Generic[Context], BaseTool):
             ):
                 context_config = config.browser_config.new_context_config
 
-            self.context = await self.browser.new_context(context_config)
+            self.context = await self.browser.new_context()
             self.dom_service = DomService(await self.context.get_current_page())
 
         # Initialize enhanced content extractor if not already done

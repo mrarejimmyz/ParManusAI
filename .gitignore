@@ -233,3 +233,6 @@ test_intelligent_creation.py
 test_quick_crypto.py
 test_reasoning_resume.py
 test_resume_creation.py
+test_browser_size.py
+.gitignore
+test_browser_use.py
