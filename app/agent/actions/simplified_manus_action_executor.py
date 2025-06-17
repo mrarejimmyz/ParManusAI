@@ -28,13 +28,13 @@ class SimplifiedManusActionExecutor:
         self.query_generator = SearchQueryGenerator()
 
         # Lazy import to avoid circular dependency
-        from app.agent.reporting import ComprehensiveReportManager
         from app.agent.progress_tracker import TodoProgressTracker
+        from app.agent.reporting import ComprehensiveReportManager
         from app.agent.self_monitor import AgentSelfMonitor
 
         self.report_manager = ComprehensiveReportManager(workspace_root)
         self.completion_analyzer = ReportCompletionAnalyzer()
-        
+
         # Add progress tracking and self-monitoring
         self.progress_tracker = TodoProgressTracker(workspace_root)
         self.self_monitor = AgentSelfMonitor(llm=self.llm)
@@ -48,12 +48,18 @@ class SimplifiedManusActionExecutor:
         """Execute data extraction from web sources"""
         try:
             logger.info(f"📊 EXTRACTION ACTION: {step}")
-            
+
             # Monitor this action
-            monitoring_result = await self.self_monitor.monitor_action(f"extraction: {step}")
+            monitoring_result = await self.self_monitor.monitor_action(
+                f"extraction: {step}"
+            )
             if monitoring_result["is_stuck"]:
-                logger.warning(f"🔄 Agent stuck during extraction: {monitoring_result['reason']}")
-                await self.progress_tracker.add_progress_note(f"Agent intervention needed: {monitoring_result['reason']}")
+                logger.warning(
+                    f"🔄 Agent stuck during extraction: {monitoring_result['reason']}"
+                )
+                await self.progress_tracker.add_progress_note(
+                    f"Agent intervention needed: {monitoring_result['reason']}"
+                )
 
             # Get current task
             self.current_task = self._get_user_message()
@@ -86,11 +92,13 @@ class SimplifiedManusActionExecutor:
                 logger.info(
                     f"✅ Extraction successful - found {len(search_results)} search results"
                 )
-                
+
                 # Mark step as complete in todo.md
                 await self.progress_tracker.mark_step_complete(step)
-                await self.self_monitor.monitor_action("extraction_complete", f"Found {len(search_results)} results")
-                
+                await self.self_monitor.monitor_action(
+                    "extraction_complete", f"Found {len(search_results)} results"
+                )
+
                 return True
             else:
                 logger.warning("⚠️ No search results found")
@@ -106,13 +114,19 @@ class SimplifiedManusActionExecutor:
         """Execute creation/output action with report generation"""
         try:
             logger.info(f"📝 CREATION ACTION: {step}")
-            
+
             # Monitor this action
-            monitoring_result = await self.self_monitor.monitor_action(f"creation: {step}")
+            monitoring_result = await self.self_monitor.monitor_action(
+                f"creation: {step}"
+            )
             if monitoring_result["is_stuck"]:
-                logger.warning(f"🔄 Agent stuck during creation: {monitoring_result['reason']}")
-                await self.progress_tracker.add_progress_note(f"Agent intervention needed: {monitoring_result['reason']}")
-            
+                logger.warning(
+                    f"🔄 Agent stuck during creation: {monitoring_result['reason']}"
+                )
+                await self.progress_tracker.add_progress_note(
+                    f"Agent intervention needed: {monitoring_result['reason']}"
+                )
+
             # Ensure we have task and report name
             if not self.current_task:
                 self.current_task = self._get_user_message()
@@ -126,7 +140,7 @@ class SimplifiedManusActionExecutor:
             search_results = []
             if self.last_search_results and self.last_search_results.get("results"):
                 search_results = self.last_search_results["results"]
-                
+
             # Check for existing report to avoid duplicates
             existing_report = await self._find_existing_report(self.current_task)
             if existing_report:
@@ -149,7 +163,9 @@ class SimplifiedManusActionExecutor:
                         logger.info("✅ Successfully enhanced existing report")
                         # Mark step as complete in todo.md
                         await self.progress_tracker.mark_step_complete(step)
-                        await self.self_monitor.monitor_action("creation_complete", "Enhanced existing report")
+                        await self.self_monitor.monitor_action(
+                            "creation_complete", "Enhanced existing report"
+                        )
                         return True
                 else:
                     logger.info("✅ Existing report is already complete, using it")
@@ -158,7 +174,9 @@ class SimplifiedManusActionExecutor:
                     report_path = existing_report
                     # Mark step as complete
                     await self.progress_tracker.mark_step_complete(step)
-                    await self.self_monitor.monitor_action("creation_complete", "Used existing complete report")
+                    await self.self_monitor.monitor_action(
+                        "creation_complete", "Used existing complete report"
+                    )
                     return True
             else:
                 # Create report using comprehensive report manager
@@ -172,11 +190,13 @@ class SimplifiedManusActionExecutor:
 
             logger.info(f"✅ Created report: {self.report_name}")
             logger.info(f"✅ Report saved to: {report_path}")
-            
+
             # Mark step as complete in todo.md
             await self.progress_tracker.mark_step_complete(step)
-            await self.self_monitor.monitor_action("creation_complete", f"Created new report: {self.report_name}")
-            
+            await self.self_monitor.monitor_action(
+                "creation_complete", f"Created new report: {self.report_name}"
+            )
+
             return True
 
         except Exception as e:

@@ -18,7 +18,9 @@ class ManusPlanning:
         logger.info(f"🎯 CREATING STRATEGIC PLAN WITH DEEP REASONING: {user_request}")
 
         # Detect task type first
-        task_type = TaskAnalyzer.categorize_task(user_request)
+        task_type = await TaskAnalyzer.categorize_task(
+            user_request, llm=getattr(self, "llm", None)
+        )
         context = {
             "user_request": user_request,
             "task_type": task_type,
