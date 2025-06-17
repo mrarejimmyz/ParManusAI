@@ -46,7 +46,12 @@ from app.agent_wrappers import create_agent
 
 # Import refactored components
 from app.config import Config, load_config
-from app.main_utils import display_startup_info, initialize_system, process_prompt
+from app.main_utils import (
+    check_and_process_todo,
+    display_startup_info,
+    initialize_system,
+    process_prompt,
+)
 
 
 async def main():
@@ -71,6 +76,11 @@ async def main():
     try:
         config, llm, memory = await initialize_system(args)
         display_startup_info(config, args, PARMANUS_AVAILABLE)
+
+        # Check for todo.md and auto-start if found
+        auto_started = await check_and_process_todo(
+            args, llm, config, memory, PARMANUS_AVAILABLE
+        )
 
         processed_cmd_prompt = False
         while True:

@@ -1,18 +1,20 @@
 import os
+import re
 import sys
 import time
 import traceback
 from typing import Any
 
+from app.agent_router import route_agent
+from app.agent_wrappers import create_agent
 from app.config import Config, load_config
 from app.logger import logger
 from app.memory import Memory
-from app.agent_wrappers import create_agent
-from app.agent_router import route_agent
 
 # Conditional import for ParManus components
 try:
     from app.llm_hybrid import create_llm_with_tools
+
     PARMANUS_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"ParManus components not fully available: {e}")
@@ -26,7 +28,9 @@ async def initialize_system(args) -> tuple[Config, Any, Any]:
 
     if args.api_type:
         if args.api_type != "ollama":
-            logger.warning(f"Only Ollama is supported. Ignoring --api-type {args.api_type}")
+            logger.warning(
+                f"Only Ollama is supported. Ignoring --api-type {args.api_type}"
+            )
         config.api_type = "ollama"
     if args.workspace:
         config.workspace_root = args.workspace
@@ -45,7 +49,9 @@ async def initialize_system(args) -> tuple[Config, Any, Any]:
 
     # Pass specific memory settings from config
     memory = Memory(
-        recover_last_session=config.memory.recover_last_session if config.memory else False,
+        recover_last_session=(
+            config.memory.recover_last_session if config.memory else False
+        ),
         memory_compression=config.memory.memory_compression if config.memory else False,
     )
     return config, llm, memory
@@ -64,7 +70,9 @@ def display_startup_info(config: Config, args, parmanus_available: bool):
         logger.info("⚡ Simple mode active")
 
 
-async def process_prompt(prompt: str, args, llm, config: Config, memory: Memory, parmanus_available: bool):
+async def process_prompt(
+    prompt: str, args, llm, config: Config, memory: Memory, parmanus_available: bool
+):
     """Process a single user prompt."""
     if not prompt or not prompt.strip():
         return
@@ -72,7 +80,11 @@ async def process_prompt(prompt: str, args, llm, config: Config, memory: Memory,
     memory.push("user", prompt)
 
     try:
-        agent_name = args.agent if args.agent else route_agent(prompt, parmanus_available and not args.simple)
+        agent_name = (
+            args.agent
+            if args.agent
+            else route_agent(prompt, parmanus_available and not args.simple)
+        )
         agent = create_agent(agent_name, llm, config)
 
         logger.info(f"🎯 Using {agent_name} agent...")
@@ -92,3 +104,43 @@ async def process_prompt(prompt: str, args, llm, config: Config, memory: Memory,
         memory.push("error", f"Error processing prompt: {e}")
 
 
+async def check_and_process_todo(
+    args, llm, config: Config, memory: Memory, parmanus_available: bool
+):
+    """Check if todo.md exists with a goal and automatically start the agent."""
+    todo_path = os.path.join(config.workspace_root, "todo.md")
+
+    if not os.path.exists(todo_path):
+        return False
+
+    try:
+        with open(todo_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Extract goal from todo.md
+        goal_match = re.search(r"\*\*Goal:\*\*\s*(.+)", content)
+        if not goal_match:
+            return False
+
+        goal = goal_match.group(1).strip()
+        if not goal or len(goal) < 10:
+            return False
+
+        # Check if there are empty steps sections (indicating agent should fill them)
+        steps_sections = re.findall(r"\*\*Steps:\*\*\s*$", content, re.MULTILINE)
+        if len(steps_sections) > 0:
+            logger.info(f"📋 Found todo.md with goal: {goal}")
+            logger.info("🤖 Auto-starting agent to work on todo.md...")
+
+            # Create prompt to work on the todo
+            auto_prompt = f"Work on the todo.md file. The goal is: {goal}. Please read the todo.md, create a detailed action plan with specific steps, and execute the tasks autonomously."
+
+            await process_prompt(
+                auto_prompt, args, llm, config, memory, parmanus_available
+            )
+            return True
+
+    except Exception as e:
+        logger.error(f"Error reading todo.md: {e}")
+
+    return False

@@ -445,7 +445,9 @@ If you cannot provide a specific recommendation due to lack of current market da
 
             # Initialize action executor if not already done
             if not hasattr(self, "action_executor"):
-                from app.agent.manus_action_executor_improved import ManusActionExecutor
+                from app.agent.actions import (
+                    SimplifiedManusActionExecutor as ManusActionExecutor,
+                )
 
                 self.action_executor = ManusActionExecutor(self)
 
@@ -645,8 +647,124 @@ If you cannot provide a specific recommendation due to lack of current market da
                 return "Error during think phase"
 
         except AgentTaskComplete:
+            # Task is complete - create final report if we have search results
+            logger.info("🎯 Task completed - creating final deliverable report")
+            try:
+                if (
+                    hasattr(self, "action_executor")
+                    and self.action_executor.last_search_results
+                ):
+                    # Create final report with all collected data
+                    await self.action_executor.execute_creation_action(
+                        "Create final report with findings"
+                    )
+                    logger.info("✅ Final report created successfully")
+                else:
+                    logger.warning("⚠️ No search results available for final report")
+            except Exception as e:
+                logger.error(f"❌ Error creating final report: {e}")
+
             self.state = AgentState.FINISHED
             return "Task completed successfully"
         except Exception as e:
             logger.error(f"Error in step(): {str(e)}")
             return f"Error in step: {str(e)}"
+
+    async def read_todo_goal(self) -> Optional[str]:
+        """Read the goal from todo.md file."""
+        try:
+            if os.path.exists(self.todo_file_path):
+                with open(self.todo_file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                # Extract goal from todo.md
+                import re
+
+                goal_match = re.search(r"\*\*Goal:\*\*\s*(.+)", content)
+                if goal_match:
+                    goal = goal_match.group(1).strip()
+                    logger.info(f"📋 Found goal in todo.md: {goal}")
+                    return goal
+        except Exception as e:
+            logger.error(f"Error reading todo.md: {e}")
+
+        return None
+
+    async def auto_plan_from_todo(self) -> bool:
+        """Automatically create a plan from todo.md goal and fill in empty steps."""
+        goal = await self.read_todo_goal()
+        if not goal:
+            return False
+
+        try:
+            # Check if todo.md has empty steps sections
+            with open(self.todo_file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            import re
+
+            empty_steps = re.findall(r"\*\*Steps:\*\*\s*$", content, re.MULTILINE)
+
+            if len(empty_steps) > 0:
+                logger.info(
+                    "🤖 Auto-generating action plan for empty steps sections..."
+                )
+
+                # Create a comprehensive plan
+                if self.llm_planner is None:
+                    self._ensure_llm_planner()
+
+                if self.llm_planner:
+                    plan = await self.llm_planner.create_comprehensive_plan(goal)
+                    self.current_plan = plan
+
+                    # Update todo.md with generated steps
+                    await self.update_todo_with_steps(plan)
+                    return True
+
+        except Exception as e:
+            logger.error(f"Error auto-planning from todo: {e}")
+
+        return False
+
+    async def update_todo_with_steps(self, plan: Dict):
+        """Update todo.md file with generated steps from the plan."""
+        try:
+            with open(self.todo_file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Generate steps for each phase
+            for i, phase in enumerate(plan.get("phases", [])):
+                phase_num = i + 1
+                steps_text = "\n".join([f"- {step}" for step in phase.get("steps", [])])
+
+                # Replace empty steps section for this phase
+                import re
+
+                pattern = f"(## Phase {phase_num}:.*?\\*\\*Steps:\\*\\*\\s*)"
+                replacement = f"\\g<1>\n{steps_text}"
+                content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+
+            # Write updated content back
+            with open(self.todo_file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            logger.info("✅ Updated todo.md with generated action steps")
+
+        except Exception as e:
+            logger.error(f"Error updating todo.md: {e}")
+
+    async def run(self, request: Optional[str] = None) -> str:
+        """Enhanced run method that checks for todo.md auto-planning."""
+        # Check if this is a todo.md-related request
+        if request and (
+            "todo.md" in request.lower() or "work on the todo" in request.lower()
+        ):
+            # Try to auto-plan from todo.md
+            auto_planned = await self.auto_plan_from_todo()
+            if auto_planned:
+                logger.info("🎯 Successfully auto-generated plan from todo.md")
+                # Now proceed with normal execution
+
+        # Call parent run method
+        return await super().run(request)
