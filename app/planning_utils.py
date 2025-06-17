@@ -8,66 +8,66 @@ class TaskAnalyzer:
     """Advanced task analysis and categorization."""
 
     @staticmethod
-    def categorize_task(user_request: str) -> str:
-        """Determine task type from user request with enhanced pattern matching."""
+    async def categorize_task(user_request: str, llm=None) -> str:
+        """Determine task type from user request using LLM intelligence."""
+        if not llm:
+            # Fallback to simple heuristics if no LLM available
+            return TaskAnalyzer._fallback_categorize_task(user_request)
+
+        try:
+            prompt = f"""Analyze this user request and categorize it into one of these task types:
+
+- report_generation: Creating reports, analyses, detailed documents, investigations
+- news_gathering: Getting current news, latest information, headlines, recent events
+- website_review: Reviewing, analyzing, or checking websites or web content
+- file_operation: File-related tasks like reading, writing, creating, modifying files
+- code_task: Programming, coding, scripting, or development tasks
+- general_task: Any other type of task
+
+User request: "{user_request}"
+
+Respond with only the task type category (e.g., "report_generation")."""
+
+            response = await llm.ask(prompt)
+            task_type = response.strip().lower()
+
+            # Validate the response
+            valid_types = {
+                "report_generation",
+                "news_gathering",
+                "website_review",
+                "file_operation",
+                "code_task",
+                "general_task",
+            }
+
+            if task_type in valid_types:
+                return task_type
+            else:
+                # Fallback if LLM response is invalid
+                return TaskAnalyzer._fallback_categorize_task(user_request)
+
+        except Exception as e:
+            import logging
+
+            logging.warning(f"LLM task categorization failed: {e}")
+            return TaskAnalyzer._fallback_categorize_task(user_request)
+
+    @staticmethod
+    def _fallback_categorize_task(user_request: str) -> str:
+        """Fallback task categorization using simple heuristics."""
         request_lower = user_request.lower()
 
-        # Report generation tasks - includes crash reports, incident reports, etc.
-        if any(
-            x in request_lower
-            for x in [
-                "report",
-                "analysis",
-                "crash",
-                "incident",
-                "investigation",
-                "detailed",
-                "comprehensive",
-            ]
-        ) and any(
-            x in request_lower
-            for x in ["create", "generate", "write", "make", "compile", "produce"]
-        ):
+        # Simple keyword-based fallback
+        if any(x in request_lower for x in ["report", "analysis", "detailed"]):
             return "report_generation"
-
-        # News and current information gathering tasks
-        if any(
-            x in request_lower
-            for x in [
-                "news",
-                "current",
-                "today",
-                "latest",
-                "recent",
-                "headlines",
-                "breaking",
-            ]
-        ) or any(
-            phrase in request_lower
-            for phrase in ["top 10", "top ten", "what's happening", "current events"]
-        ):
+        elif any(x in request_lower for x in ["news", "current", "latest"]):
             return "news_gathering"
-
-        # Website related tasks
-        if any(
-            x in request_lower
-            for x in ["review", "analyze", "check", "browse", "visit"]
-        ):
-            if any(x in request_lower for x in ["http", "www", ".com", ".org", ".net"]):
-                return "website_review"
-
-        # File operations
-        if any(
-            x in request_lower
-            for x in ["file", "read", "write", "create", "delete", "modify"]
-        ):
+        elif any(x in request_lower for x in ["http", "www", ".com", "website"]):
+            return "website_review"
+        elif any(x in request_lower for x in ["file", "read", "write"]):
             return "file_operation"
-
-        # Code tasks
-        if any(
-            x in request_lower
-            for x in ["code", "program", "script", "function", "class"]
-        ):
+        elif any(x in request_lower for x in ["code", "program", "script"]):
             return "code_task"
 
         return "general_task"

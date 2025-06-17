@@ -29,9 +29,15 @@ class SimplifiedManusActionExecutor:
 
         # Lazy import to avoid circular dependency
         from app.agent.reporting import ComprehensiveReportManager
+        from app.agent.progress_tracker import TodoProgressTracker
+        from app.agent.self_monitor import AgentSelfMonitor
 
         self.report_manager = ComprehensiveReportManager(workspace_root)
         self.completion_analyzer = ReportCompletionAnalyzer()
+        
+        # Add progress tracking and self-monitoring
+        self.progress_tracker = TodoProgressTracker(workspace_root)
+        self.self_monitor = AgentSelfMonitor(llm=self.llm)
 
         # State tracking
         self.last_search_results = None
@@ -42,6 +48,12 @@ class SimplifiedManusActionExecutor:
         """Execute data extraction from web sources"""
         try:
             logger.info(f"📊 EXTRACTION ACTION: {step}")
+            
+            # Monitor this action
+            monitoring_result = await self.self_monitor.monitor_action(f"extraction: {step}")
+            if monitoring_result["is_stuck"]:
+                logger.warning(f"🔄 Agent stuck during extraction: {monitoring_result['reason']}")
+                await self.progress_tracker.add_progress_note(f"Agent intervention needed: {monitoring_result['reason']}")
 
             # Get current task
             self.current_task = self._get_user_message()
@@ -74,21 +86,34 @@ class SimplifiedManusActionExecutor:
                 logger.info(
                     f"✅ Extraction successful - found {len(search_results)} search results"
                 )
+                
+                # Mark step as complete in todo.md
+                await self.progress_tracker.mark_step_complete(step)
+                await self.self_monitor.monitor_action("extraction_complete", f"Found {len(search_results)} results")
+                
                 return True
             else:
                 logger.warning("⚠️ No search results found")
+                self.self_monitor.mark_error("No search results found")
                 return False
 
         except Exception as e:
             logger.error(f"❌ Extraction action failed: {str(e)}")
+            self.self_monitor.mark_error(str(e))
             return False
 
     async def execute_creation_action(self, step: str) -> bool:
         """Execute creation/output action with report generation"""
         try:
-            logger.info(
-                f"📝 CREATION ACTION: {step}"
-            )  # Ensure we have task and report name
+            logger.info(f"📝 CREATION ACTION: {step}")
+            
+            # Monitor this action
+            monitoring_result = await self.self_monitor.monitor_action(f"creation: {step}")
+            if monitoring_result["is_stuck"]:
+                logger.warning(f"🔄 Agent stuck during creation: {monitoring_result['reason']}")
+                await self.progress_tracker.add_progress_note(f"Agent intervention needed: {monitoring_result['reason']}")
+            
+            # Ensure we have task and report name
             if not self.current_task:
                 self.current_task = self._get_user_message()
 
@@ -100,10 +125,10 @@ class SimplifiedManusActionExecutor:
             # Get search results if available
             search_results = []
             if self.last_search_results and self.last_search_results.get("results"):
-                search_results = self.last_search_results[
-                    "results"
-                ]  # Check for existing report to avoid duplicates
-            existing_report = self._find_existing_report(self.current_task)
+                search_results = self.last_search_results["results"]
+                
+            # Check for existing report to avoid duplicates
+            existing_report = await self._find_existing_report(self.current_task)
             if existing_report:
                 logger.info(
                     f"📄 Found existing report: {os.path.basename(existing_report)}"
@@ -122,12 +147,18 @@ class SimplifiedManusActionExecutor:
                     success = await self.complete_incomplete_report(existing_report)
                     if success:
                         logger.info("✅ Successfully enhanced existing report")
+                        # Mark step as complete in todo.md
+                        await self.progress_tracker.mark_step_complete(step)
+                        await self.self_monitor.monitor_action("creation_complete", "Enhanced existing report")
                         return True
                 else:
                     logger.info("✅ Existing report is already complete, using it")
                     # Update our tracking
                     self.report_name = os.path.basename(existing_report)
                     report_path = existing_report
+                    # Mark step as complete
+                    await self.progress_tracker.mark_step_complete(step)
+                    await self.self_monitor.monitor_action("creation_complete", "Used existing complete report")
                     return True
             else:
                 # Create report using comprehensive report manager
@@ -141,10 +172,16 @@ class SimplifiedManusActionExecutor:
 
             logger.info(f"✅ Created report: {self.report_name}")
             logger.info(f"✅ Report saved to: {report_path}")
+            
+            # Mark step as complete in todo.md
+            await self.progress_tracker.mark_step_complete(step)
+            await self.self_monitor.monitor_action("creation_complete", f"Created new report: {self.report_name}")
+            
             return True
 
         except Exception as e:
             logger.error(f"❌ Creation action failed: {str(e)}")
+            self.self_monitor.mark_error(str(e))
             return False
 
     # Simple pass-through methods for other actions
@@ -416,45 +453,80 @@ class SimplifiedManusActionExecutor:
         """Generate search query (compatibility method)"""
         return await self.query_generator.generate_query(task_description, step)
 
-    def _find_existing_report(self, task_description: str) -> Optional[str]:
-        """Find existing report for the same task to avoid duplicates"""
+    async def _find_existing_report(self, task_description: str) -> Optional[str]:
+        """Find existing report for the same task using LLM-driven relevance matching"""
         try:
             import glob
             import os
 
-            # Clean task description to match naming convention
-            clean_task = self._clean_task_for_search(task_description)
-
-            # Search for reports with similar task names - use a more flexible pattern
             workspace_path = getattr(self.agent, "workspace_root", "workspace")
+            logger.info(
+                f"🧠 Using LLM to find relevant existing reports for: {task_description[:100]}..."
+            )
 
-            # Try multiple search patterns to find existing reports
-            patterns = [
-                os.path.join(workspace_path, f"*{clean_task}*.md"),
-                os.path.join(
-                    workspace_path, f"*analyze*github*repository*.md"
-                ),  # More specific for GitHub tasks
-                os.path.join(
-                    workspace_path, f"analysis_analyze*.md"
-                ),  # General analysis reports
-            ]
+            # Get all markdown files in workspace (excluding todo.md)
+            all_files = glob.glob(os.path.join(workspace_path, "*.md"))
+            report_files = [f for f in all_files if not f.endswith("todo.md")]
 
-            existing_files = []
-            for pattern in patterns:
-                existing_files.extend(glob.glob(pattern))
+            if not report_files:
+                logger.info("📄 No existing reports found in workspace")
+                return None
 
-            # Remove duplicates and filter out todo.md
-            unique_files = list(set(existing_files))
-            report_files = [f for f in unique_files if not f.endswith("todo.md")]
+            logger.info(
+                f"📄 Found {len(report_files)} existing report(s), checking relevance with LLM..."
+            )
 
-            if report_files:
-                # Return the most recently modified file
-                latest_report = max(report_files, key=os.path.getmtime)
-                logger.info(
-                    f"📄 Found existing report: {os.path.basename(latest_report)}"
-                )
-                return latest_report
+            # Use LLM to determine relevance of each report
+            for report_file in report_files:
+                try:
+                    # Read the first few lines of the report to understand its content
+                    with open(report_file, "r", encoding="utf-8") as f:
+                        report_content = f.read(1000)  # First 1000 characters
 
+                    report_name = os.path.basename(report_file)
+
+                    # Ask LLM if this report is relevant to the current task
+                    relevance_prompt = f"""
+Task: Determine if an existing report is relevant to a new task.
+
+NEW TASK: {task_description}
+
+EXISTING REPORT NAME: {report_name}
+EXISTING REPORT CONTENT (first 1000 chars):
+{report_content}
+
+Question: Is this existing report relevant to the new task?
+- Answer "YES" only if the report is about the same topic/subject as the new task
+- Answer "NO" if it's about a completely different topic
+- Consider: A GitHub analysis report is NOT relevant to a travel planning task
+- Consider: A travel report to one location is NOT relevant to a different location
+- Be very strict - only match if it's truly the same or very similar task
+
+Answer with just "YES" or "NO":"""
+
+                    if self.llm:
+                        response = await self.llm.ask(
+                            [{"role": "user", "content": relevance_prompt}]
+                        )
+                        is_relevant = response.strip().upper() == "YES"
+
+                        logger.info(
+                            f"🧠 LLM says '{report_name}' is {'RELEVANT' if is_relevant else 'NOT RELEVANT'} to new task"
+                        )
+
+                        if is_relevant:
+                            logger.info(
+                                f"✅ Found relevant existing report: {report_name}"
+                            )
+                            return report_file
+
+                except Exception as e:
+                    logger.warning(f"Error checking relevance of {report_name}: {e}")
+                    continue
+
+            logger.info(
+                "📄 No relevant existing reports found - will create new report"
+            )
             return None
 
         except Exception as e:

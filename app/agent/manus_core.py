@@ -159,6 +159,41 @@ class Manus(ToolCallAgent):
             if re.search(pattern, request_lower):
                 return True
 
+        # Use LLM to determine if this is a simple query
+        try:
+            prompt = f"""Is this user request a simple query that can be answered quickly (within 1-2 minutes) with a brief response?
+
+Consider it simple if it's:
+- A basic factual question
+- A quick lookup or definition
+- A short "what/who/when/where/how/why" question
+- Something that doesn't require detailed research or complex analysis
+
+User request: "{user_request}"
+
+Respond with only "yes" or "no"."""
+
+            response = await self.llm.ask(prompt)
+            is_simple = response.strip().lower() == "yes"
+
+            if is_simple:
+                logger.info("🔍 LLM determined this is a simple query")
+                return True
+            else:
+                logger.info(
+                    "🔍 LLM determined this is a complex query requiring detailed analysis"
+                )
+                return False
+
+        except Exception as e:
+            logger.warning(f"LLM simple query detection failed: {e}")
+            # Fallback to simple heuristics
+            return self._fallback_is_simple_query(user_request)
+
+    def _fallback_is_simple_query(self, user_request: str) -> bool:
+        """Fallback simple query detection using basic heuristics."""
+        request_lower = user_request.lower()
+
         # Check for short queries (likely simple)
         if len(request_lower.split()) <= 6:
             simple_keywords = [
