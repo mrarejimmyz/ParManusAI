@@ -514,7 +514,15 @@ If you cannot provide a specific recommendation due to lack of current market da
             # File creation steps - generate reports and documents
             elif any(
                 keyword in step_lower
-                for keyword in ["generate", "create", "format", "output", ".md"]
+                for keyword in [
+                    "generate",
+                    "create",
+                    "format",
+                    "output",
+                    ".md",
+                    "write",
+                    "report",
+                ]
             ):
                 logger.info(f"Executing file creation for: {current_step}")
                 action_success = await self.action_executor.execute_creation_action(
