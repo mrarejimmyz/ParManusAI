@@ -218,3 +218,7 @@ class ComprehensiveReportManager:
         """Verify that all original features are working"""
         verification = self.feature_manager.verify_feature_completeness()
         return all(verification.values())
+
+    def get_latest_report(self) -> Optional[str]:
+        """Get the latest report file from the workspace"""
+        return self.feature_manager.get_latest_report()

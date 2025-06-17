@@ -476,8 +476,7 @@ class CompleteFeatureManager:
         return verification_results
 
     def get_feature_usage_stats(self) -> Dict[str, int]:
-        """Track usage of different features (for debugging and optimization)"""
-        # This would be implemented with actual usage tracking
+        """Track usage of different features (for debugging and optimization)"""  # This would be implemented with actual usage tracking
         # For now, return a placeholder
         return {
             "reports_created": 0,
@@ -485,3 +484,26 @@ class CompleteFeatureManager:
             "search_validations": 0,
             "llm_queries": 0,
         }
+
+    def get_latest_report(self) -> Optional[str]:
+        """Get the latest report file from the workspace"""
+        import glob
+
+        # Look for all .md files in the workspace
+        pattern = os.path.join(self.workspace_path, "*.md")
+        report_files = glob.glob(pattern)
+
+        if not report_files:
+            return None
+
+        # Filter out todo.md and find actual reports
+        actual_reports = [f for f in report_files if not f.endswith("todo.md")]
+
+        if not actual_reports:
+            return None
+
+        # Return the most recently modified file
+        latest_report = max(actual_reports, key=os.path.getmtime)
+        return latest_report
+
+    # =============================================================================

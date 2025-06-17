@@ -161,11 +161,19 @@ class ManusUtils:
         # Check if we've completed all phases
         if next_phase >= len(self.agent.current_plan["phases"]):
             # Before completing, verify all deliverables are actually created
-            await self._verify_all_deliverables_created()
-            logger.info("All phases complete!")
-            raise AgentTaskComplete(
-                "All phases of the plan have been completed with verified deliverables"
-            )
+            deliverables_verified = await self._verify_all_deliverables_created()
+
+            if not deliverables_verified:
+                # Incomplete deliverables found and completion tasks added
+                # The plan now has more phases, so continue execution
+                logger.info("🔄 Added completion tasks - continuing execution...")
+                # Stay in current phase since new phases were inserted
+                return True
+            else:
+                logger.info("All phases complete!")
+                raise AgentTaskComplete(
+                    "All phases of the plan have been completed with verified deliverables"
+                )
 
         # Move to next phase
         self.agent.current_phase = next_phase
@@ -286,23 +294,82 @@ class ManusUtils:
                     f"✅ Found {len(md_files)} deliverable(s) in workspace: {[os.path.basename(f) for f in md_files]}"
                 )
 
-                # Verify each file has substantial content
+                # Verify each file has substantial content AND check completion percentage
                 verified_files = 0
+                incomplete_reports = []
+
                 for filepath in md_files:
                     try:
                         with open(filepath, "r", encoding="utf-8") as f:
                             content = f.read()
                             if len(content) > 500:  # Substantial content
-                                verified_files += 1
-                                logger.info(
-                                    f"✅ Verified deliverable: {os.path.basename(filepath)} ({len(content)} characters)"
-                                )
+                                # Check report completion percentage if we have report analyzer
+                                completion_pct = 0
+                                try:
+                                    if hasattr(
+                                        self.agent, "action_executor"
+                                    ) and hasattr(
+                                        self.agent.action_executor,
+                                        "completion_analyzer",
+                                    ):
+                                        analysis = self.agent.action_executor.completion_analyzer.analyze_report_completeness(
+                                            filepath
+                                        )
+                                        completion_pct = analysis.get(
+                                            "completion_percentage", 0
+                                        )
+
+                                        if (
+                                            completion_pct >= 90
+                                        ):  # Report is substantially complete
+                                            verified_files += 1
+                                            logger.info(
+                                                f"✅ Verified complete deliverable: {os.path.basename(filepath)} ({completion_pct:.1f}% complete, {len(content)} characters)"
+                                            )
+                                        else:
+                                            incomplete_reports.append(
+                                                (filepath, completion_pct)
+                                            )
+                                            logger.warning(
+                                                f"⚠️ Deliverable incomplete: {os.path.basename(filepath)} ({completion_pct:.1f}% complete)"
+                                            )
+                                    else:
+                                        # Fallback to basic content check if no analyzer
+                                        verified_files += 1
+                                        logger.info(
+                                            f"✅ Verified deliverable: {os.path.basename(filepath)} ({len(content)} characters)"
+                                        )
+                                except Exception as analyzer_error:
+                                    logger.warning(
+                                        f"Could not analyze completion for {filepath}: {analyzer_error}"
+                                    )
+                                    # Fallback to basic verification
+                                    verified_files += 1
+                                    logger.info(
+                                        f"✅ Verified deliverable (basic check): {os.path.basename(filepath)} ({len(content)} characters)"
+                                    )
                             else:
                                 logger.warning(
                                     f"⚠️ Deliverable has insufficient content: {os.path.basename(filepath)} ({len(content)} characters)"
                                 )
                     except Exception as e:
                         logger.warning(f"Could not verify {filepath}: {e}")
+
+                # If there are incomplete reports, don't complete the task yet
+                if incomplete_reports:
+                    logger.warning(
+                        f"⚠️ Found {len(incomplete_reports)} incomplete report(s):"
+                    )
+                    for filepath, completion_pct in incomplete_reports:
+                        logger.warning(
+                            f"   - {os.path.basename(filepath)}: {completion_pct:.1f}% complete"
+                        )
+
+                    # Add tasks to complete the reports
+                    await self._add_completion_tasks_for_incomplete_reports(
+                        incomplete_reports
+                    )
+                    return False  # Don't complete task yet
 
                 if verified_files > 0:
                     logger.info(
@@ -323,6 +390,66 @@ class ManusUtils:
         except Exception as e:
             logger.error(f"Error verifying deliverables: {e}")
             return False
+
+    async def _add_completion_tasks_for_incomplete_reports(self, incomplete_reports):
+        """Add tasks to complete incomplete reports"""
+        try:
+            logger.info("🔧 Adding tasks to complete incomplete reports...")
+
+            for filepath, completion_pct in incomplete_reports:
+                filename = os.path.basename(filepath)
+
+                # Get specific missing sections from the analyzer
+                try:
+                    if hasattr(self.agent, "action_executor") and hasattr(
+                        self.agent.action_executor, "completion_analyzer"
+                    ):
+                        analysis = self.agent.action_executor.completion_analyzer.analyze_report_completeness(
+                            filepath
+                        )
+                        missing_sections = analysis.get("missing_sections", [])
+                        placeholder_sections = analysis.get("placeholder_sections", [])
+
+                        # Add a phase to complete this report
+                        completion_phase = {
+                            "name": f"Complete {filename}",
+                            "description": f"Improve {filename} from {completion_pct:.1f}% to 100% completion",
+                            "steps": [],
+                        }
+
+                        # Add specific steps for missing sections
+                        for section in missing_sections:
+                            completion_phase["steps"].append(
+                                f"Add missing section: {section}"
+                            )
+
+                        # Add specific steps for placeholder sections
+                        for section in placeholder_sections:
+                            completion_phase["steps"].append(
+                                f"Complete placeholder content in: {section}"
+                            )
+
+                        # Add a final review step
+                        completion_phase["steps"].append(
+                            f"Review and finalize {filename} to ensure 100% completion"
+                        )
+
+                        # Append this phase to the end of the plan
+                        if "phases" not in self.agent.current_plan:
+                            self.agent.current_plan["phases"] = []
+
+                        self.agent.current_plan["phases"].append(completion_phase)
+                        logger.info(
+                            f"✅ Added completion phase for {filename} with {len(completion_phase['steps'])} steps"
+                        )
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not analyze {filepath} for completion tasks: {e}"
+                    )
+
+        except Exception as e:
+            logger.error(f"Error adding completion tasks: {e}")
 
     async def recover_from_invalid_position(self) -> bool:
         """Recover from invalid position by resetting to valid indices"""
