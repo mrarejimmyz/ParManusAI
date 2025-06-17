@@ -27,7 +27,7 @@ NEW ORGANIZED STRUCTURE:
   └── enhanced_todo_manager.py
 """
 
-from app.agent.actions import ActionExecutorFeatures
+from app.agent.actions import ActionExecutorFeatures, SimplifiedManusActionExecutor
 
 # Main interfaces - easy imports
 from app.agent.reporting import CompleteFeatureManager, ComprehensiveReportManager
@@ -69,9 +69,9 @@ __all__ = [
     # Utilities
     "ReportNameGenerator",
     "LLMResponseParser",
-    "FeatureCompletenessVerifier",
-    # Actions
+    "FeatureCompletenessVerifier",  # Actions
     "ActionExecutorFeatures",
+    "SimplifiedManusActionExecutor",
     # Todo management
     "TodoManager",
     "EnhancedTodoManager",
