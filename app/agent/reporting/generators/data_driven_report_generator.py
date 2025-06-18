@@ -23,10 +23,10 @@ class DataDrivenReportGenerator:
         """Create intelligent report using LLM analysis of search results"""
         try:
             from app.config import load_config
-            from app.llm_hybrid import HybridOllamaLLM
+            from app.llm import LLM
 
             config = load_config()
-            llm = HybridOllamaLLM(config)
+            llm = LLM(config.llm)
 
             report_path = os.path.join(self.workspace_path, report_name)
 

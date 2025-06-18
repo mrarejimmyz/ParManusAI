@@ -131,10 +131,10 @@ class SearchResultValidator:
         """Use LLM to validate search result relevance"""
         try:
             from app.config import load_config
-            from app.llm_hybrid import HybridOllamaLLM
+            from app.llm import LLM
 
             config = load_config()
-            llm = HybridOllamaLLM(config)
+            llm = LLM(config.llm)
 
             # Prepare results for LLM analysis
             results_text = ""

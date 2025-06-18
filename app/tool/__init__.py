@@ -1,16 +1,21 @@
-from app.tool.base import BaseTool
 from app.tool.bash import Bash
 from app.tool.browser_use_tool import BrowserUseTool
+from app.tool.core.base import BaseTool, ToolRegistry, ToolResult
 from app.tool.create_chat_completion import CreateChatCompletion
+
+# Import unified implementations
+from app.tool.implementations.browser import UnifiedBrowserTool
+from app.tool.implementations.search import UnifiedSearchTool
 from app.tool.planning import PlanningTool
 from app.tool.str_replace_editor import StrReplaceEditor
 from app.tool.terminate import Terminate
 from app.tool.tool_collection import ToolCollection
 from app.tool.web_search import WebSearch
 
-
 __all__ = [
     "BaseTool",
+    "ToolResult",
+    "ToolRegistry",
     "Bash",
     "BrowserUseTool",
     "Terminate",
@@ -19,4 +24,7 @@ __all__ = [
     "ToolCollection",
     "CreateChatCompletion",
     "PlanningTool",
+    # Unified implementations
+    "UnifiedBrowserTool",
+    "UnifiedSearchTool",
 ]

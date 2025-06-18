@@ -23,10 +23,10 @@ class SimpleReportGenerator:
         """Create intelligent report using LLM analysis"""
         try:
             from app.config import load_config
-            from app.llm_hybrid import HybridOllamaLLM
+            from app.llm import LLM
 
             config = load_config()
-            llm = HybridOllamaLLM(config)
+            llm = LLM(config.llm)
 
             if not search_results:
                 # Generate knowledge-based report

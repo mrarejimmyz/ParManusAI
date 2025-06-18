@@ -32,7 +32,7 @@ try:
     from app.agent.code import CodeAgent
     from app.agent.manus_core import Manus
     from app.config import Config as ParManusConfig
-    from app.llm_hybrid import create_llm_with_tools
+    from app.llm import create_llm
     from app.memory import Memory
     from app.schema import AgentState, Message
 
@@ -74,7 +74,7 @@ async def main():
     args = parser.parse_args()
 
     try:
-        config, llm, memory = await initialize_system(args)
+        config, llm, memory = initialize_system(args)
         display_startup_info(config, args, PARMANUS_AVAILABLE)
 
         # Check for todo.md and auto-start if found

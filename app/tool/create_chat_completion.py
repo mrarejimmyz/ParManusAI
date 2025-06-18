@@ -2,14 +2,11 @@ from typing import Any, List, Optional, Type, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field
 
-from app.tool import BaseTool
+from app.tool.core import BaseTool, ToolConfig, ToolResult
 
 
 class CreateChatCompletion(BaseTool):
-    name: str = "create_chat_completion"
-    description: str = (
-        "Creates a structured completion with specified output formatting."
-    )
+    """Tool for creating structured completions with specified output formatting."""
 
     # Type mapping for JSON schema
     type_mapping: dict = {
@@ -20,18 +17,36 @@ class CreateChatCompletion(BaseTool):
         dict: "object",
         list: "array",
     }
-    response_type: Optional[Type] = None
+    response_type: Optional[Type] = Field(
+        default=str, description="Expected response type"
+    )
     required: List[str] = Field(default_factory=lambda: ["response"])
 
-    def __init__(self, response_type: Optional[Type] = str):
-        """Initialize with a specific response type."""
-        super().__init__()
-        self.response_type = response_type
-        self.parameters = self._build_parameters()
+    @property
+    def name(self) -> str:
+        """Get tool name for compatibility."""
+        return self.config.name if hasattr(self, "config") else "create_chat_completion"
 
-    def _build_parameters(self) -> dict:
+    def __init__(self, response_type: Optional[Type] = str, **kwargs):
+        """Initialize with a specific response type."""
+        # Build the ToolConfig
+        config = ToolConfig(
+            name="create_chat_completion",
+            description="Creates a structured completion with specified output formatting.",
+            parameters=self._build_parameters_for_type(response_type),
+            llm_enabled=False,  # This tool is for structuring responses, not calling LLM
+            cache_enabled=False,
+        )
+
+        if "config" not in kwargs:
+            kwargs["config"] = config
+
+        super().__init__(**kwargs)
+        self.response_type = response_type
+
+    def _build_parameters_for_type(self, response_type: Optional[Type] = None) -> dict:
         """Build parameters schema based on response type."""
-        if self.response_type == str:
+        if response_type == str:
             return {
                 "type": "object",
                 "properties": {
@@ -40,20 +55,18 @@ class CreateChatCompletion(BaseTool):
                         "description": "The response text that should be delivered to the user.",
                     },
                 },
-                "required": self.required,
+                "required": ["response"],
             }
 
-        if isinstance(self.response_type, type) and issubclass(
-            self.response_type, BaseModel
-        ):
-            schema = self.response_type.model_json_schema()
+        if isinstance(response_type, type) and issubclass(response_type, BaseModel):
+            schema = response_type.model_json_schema()
             return {
                 "type": "object",
                 "properties": schema["properties"],
-                "required": schema.get("required", self.required),
+                "required": schema.get("required", ["response"]),
             }
 
-        return self._create_type_schema(self.response_type)
+        return self._create_type_schema(response_type)
 
     def _create_type_schema(self, type_hint: Type) -> dict:
         """Create a JSON schema for the given type."""
@@ -70,7 +83,7 @@ class CreateChatCompletion(BaseTool):
                         "description": f"Response of type {type_hint.__name__}",
                     }
                 },
-                "required": self.required,
+                "required": ["response"],
             }
 
         # Handle List type
@@ -84,7 +97,7 @@ class CreateChatCompletion(BaseTool):
                         "items": self._get_type_info(item_type),
                     }
                 },
-                "required": self.required,
+                "required": ["response"],
             }
 
         # Handle Dict type
@@ -98,14 +111,24 @@ class CreateChatCompletion(BaseTool):
                         "additionalProperties": self._get_type_info(value_type),
                     }
                 },
-                "required": self.required,
+                "required": ["response"],
             }
 
         # Handle Union type
         if origin is Union:
             return self._create_union_schema(args)
 
-        return self._build_parameters()
+        # Fallback
+        return {
+            "type": "object",
+            "properties": {
+                "response": {
+                    "type": "string",
+                    "description": "Response content",
+                }
+            },
+            "required": ["response"],
+        }
 
     def _get_type_info(self, type_hint: Type) -> dict:
         """Get type information for a single type."""
@@ -124,8 +147,21 @@ class CreateChatCompletion(BaseTool):
             "properties": {
                 "response": {"anyOf": [self._get_type_info(t) for t in types]}
             },
-            "required": self.required,
+            "required": ["response"],
         }
+
+    async def _execute(self, **kwargs) -> Any:
+        """
+        Core execution logic - required by BaseTool.
+        Delegates to the existing execute method.
+        """
+        from app.tool.core.base import ToolResult
+
+        try:
+            result = await self.execute(**kwargs)
+            return ToolResult(success=True, content=result)
+        except Exception as e:
+            return ToolResult(success=False, error=str(e))
 
     async def execute(self, required: list | None = None, **kwargs) -> Any:
         """Execute the chat completion with type conversion.

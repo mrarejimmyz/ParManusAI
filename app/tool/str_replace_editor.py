@@ -15,7 +15,6 @@ from app.tool.file_operators import (
     SandboxFileOperator,
 )
 
-
 Command = Literal[
     "view",
     "create",
@@ -60,47 +59,73 @@ def maybe_truncate(
 class StrReplaceEditor(BaseTool):
     """A tool for viewing, creating, and editing files with sandbox support."""
 
-    name: str = "str_replace_editor"
-    description: str = _STR_REPLACE_EDITOR_DESCRIPTION
-    parameters: dict = {
-        "type": "object",
-        "properties": {
-            "command": {
-                "description": "The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.",
-                "enum": ["view", "create", "str_replace", "insert", "undo_edit"],
-                "type": "string",
-            },
-            "path": {
-                "description": "Absolute path to file or directory.",
-                "type": "string",
-            },
-            "file_text": {
-                "description": "Required parameter of `create` command, with the content of the file to be created.",
-                "type": "string",
-            },
-            "old_str": {
-                "description": "Required parameter of `str_replace` command containing the string in `path` to replace.",
-                "type": "string",
-            },
-            "new_str": {
-                "description": "Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.",
-                "type": "string",
-            },
-            "insert_line": {
-                "description": "Required parameter of `insert` command. The `new_str` will be inserted AFTER the line `insert_line` of `path`.",
-                "type": "integer",
-            },
-            "view_range": {
-                "description": "Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown. If provided, the file will be shown in the indicated line number range, e.g. [11, 12] will show lines 11 and 12. Indexing at 1 to start. Setting `[start_line, -1]` shows all lines from `start_line` to the end of the file.",
-                "items": {"type": "integer"},
-                "type": "array",
-            },
-        },
-        "required": ["command", "path"],
-    }
     _file_history: DefaultDict[PathLike, List[str]] = defaultdict(list)
     _local_operator: LocalFileOperator = LocalFileOperator()
     _sandbox_operator: SandboxFileOperator = SandboxFileOperator()
+
+    def __init__(self, **kwargs):
+        """Initialize with proper ToolConfig."""
+        from app.tool.core.base import ToolConfig
+
+        # Create the unified ToolConfig
+        config = ToolConfig(
+            name="str_replace_editor",
+            description=_STR_REPLACE_EDITOR_DESCRIPTION,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "description": "The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.",
+                        "enum": [
+                            "view",
+                            "create",
+                            "str_replace",
+                            "insert",
+                            "undo_edit",
+                        ],
+                        "type": "string",
+                    },
+                    "path": {
+                        "description": "Absolute path to file or directory.",
+                        "type": "string",
+                    },
+                    "file_text": {
+                        "description": "Required parameter of `create` command, with the content of the file to be created.",
+                        "type": "string",
+                    },
+                    "old_str": {
+                        "description": "Required parameter of `str_replace` command containing the string in `path` to replace.",
+                        "type": "string",
+                    },
+                    "new_str": {
+                        "description": "Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.",
+                        "type": "string",
+                    },
+                    "insert_line": {
+                        "description": "Required parameter of `insert` command. The `new_str` will be inserted AFTER the line `insert_line` of `path`.",
+                        "type": "integer",
+                    },
+                    "view_range": {
+                        "description": "Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown. If provided, the file will be shown in the indicated line number range, e.g. [11, 12] will show lines 11 and 12. Indexing at 1 to start. Setting `[start_line, -1]` shows all lines from `start_line` to the end of the file.",
+                        "items": {"type": "integer"},
+                        "type": "array",
+                    },
+                },
+                "required": ["command", "path"],
+            },
+            llm_enabled=False,
+            cache_enabled=False,
+        )
+
+        if "config" not in kwargs:
+            kwargs["config"] = config
+
+        super().__init__(**kwargs)
+
+    @property
+    def name(self) -> str:
+        """Get tool name for compatibility."""
+        return self.config.name
 
     # def _get_operator(self, use_sandbox: bool) -> FileOperator:
     def _get_operator(self) -> FileOperator:
@@ -404,6 +429,30 @@ class StrReplaceEditor(BaseTool):
         return CLIResult(
             output=f"Last edit to {path} undone successfully. {self._make_output(old_text, str(path))}"
         )
+
+    async def _execute(self, **kwargs) -> Any:
+        """
+        Core execution logic - required by BaseTool.
+        Delegates to the existing execute method.
+        """
+        from app.tool.core.base import ToolResult as UnifiedToolResult
+
+        try:
+            result = await self.execute(**kwargs)
+            # If result is already a string (as expected from execute), wrap it
+            if isinstance(result, str):
+                return UnifiedToolResult(success=True, content=result)
+            elif hasattr(result, "output"):
+                return UnifiedToolResult(success=True, content=result.output)
+            else:
+                return UnifiedToolResult(success=True, content=str(result))
+        except Exception as e:
+            return UnifiedToolResult(success=False, error=str(e))
+
+    @property
+    def get_name(self) -> str:
+        """Get tool name for compatibility."""
+        return self.name
 
     def _make_output(
         self,

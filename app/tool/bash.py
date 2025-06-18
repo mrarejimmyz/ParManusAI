@@ -3,8 +3,8 @@ import os
 from typing import Optional
 
 from app.exceptions import ToolError
-from app.tool.base import BaseTool, CLIResult
-
+from app.tool.base import CLIResult
+from app.tool.core import BaseTool, ToolConfig, ToolResult
 
 _BASH_DESCRIPTION = """Execute a bash command in the terminal.
 * Long running commands: For commands that may run indefinitely, it should be run in the background and the output should be redirected to a file, e.g. command = `python3 app.py > server.log 2>&1 &`.
@@ -116,20 +116,49 @@ class _BashSession:
 class Bash(BaseTool):
     """A tool for executing bash commands"""
 
-    name: str = "bash"
-    description: str = _BASH_DESCRIPTION
-    parameters: dict = {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "The bash command to execute. Can be empty to view additional logs when previous exit code is `-1`. Can be `ctrl+c` to interrupt the currently running process.",
-            },
-        },
-        "required": ["command"],
-    }
-
     _session: Optional[_BashSession] = None
+
+    def __init__(self, **kwargs):
+        """Initialize with proper ToolConfig."""
+        config = ToolConfig(
+            name="bash",
+            description=_BASH_DESCRIPTION,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The bash command to execute. Can be empty to view additional logs when previous exit code is `-1`. Can be `ctrl+c` to interrupt the currently running process.",
+                    },
+                },
+                "required": ["command"],
+            },
+            llm_enabled=False,
+            cache_enabled=False,
+        )
+
+        if "config" not in kwargs:
+            kwargs["config"] = config
+
+        super().__init__(**kwargs)
+
+    @property
+    def name(self) -> str:
+        """Get tool name for compatibility."""
+        return self.config.name
+
+    async def _execute(self, **kwargs):
+        """
+        Core execution logic - required by BaseTool.
+        """
+        command = kwargs.get("command")
+        restart = kwargs.get("restart", False)
+
+        try:
+            result = await self.execute(command=command, restart=restart, **kwargs)
+            return ToolResult(success=True, content=str(result))
+        except Exception as e:
+            return ToolResult(success=False, error=str(e))
 
     async def execute(
         self, command: str | None = None, restart: bool = False, **kwargs

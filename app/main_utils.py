@@ -13,7 +13,7 @@ from app.memory import Memory
 
 # Conditional import for ParManus components
 try:
-    from app.llm_hybrid import create_llm_with_tools
+    from app.llm import create_llm
 
     PARMANUS_AVAILABLE = True
 except ImportError as e:
@@ -21,26 +21,28 @@ except ImportError as e:
     PARMANUS_AVAILABLE = False
 
 
-async def initialize_system(args) -> tuple[Config, Any, Any]:
+def initialize_system(args) -> tuple[Config, Any, Any]:
     """Initialize configuration, LLM, and memory."""
     logger.info("Initializing ParManus AI Agent System...")
-    config = load_config(args.config)
+    config = load_config(args.config if hasattr(args, "config") else None)
 
-    if args.api_type:
+    if hasattr(args, "api_type") and args.api_type:
         if args.api_type != "ollama":
             logger.warning(
                 f"Only Ollama is supported. Ignoring --api-type {args.api_type}"
             )
-        config.api_type = "ollama"
-    if args.workspace:
+        # Note: api_type is now part of config.llm.api_type, not directly on config
+        config.llm.api_type = "ollama"
+    if hasattr(args, "workspace") and args.workspace:
         config.workspace_root = args.workspace
-    if args.max_steps:
+    if hasattr(args, "max_steps") and args.max_steps:
         config.max_steps = args.max_steps
 
     os.makedirs(config.workspace_root, exist_ok=True)
 
     try:
-        llm = create_llm_with_tools(config)
+        # Pass the LLM settings instead of the entire config
+        llm = create_llm(config.llm)
     except Exception as e:
         logger.error(f"Failed to initialize Ollama LLM: {e}")
         logger.error("Make sure Ollama is running: ollama serve")

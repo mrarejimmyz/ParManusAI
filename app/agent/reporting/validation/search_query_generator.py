@@ -23,10 +23,10 @@ class SearchQueryGenerator:
         """Use LLM to intelligently generate search query"""
         try:
             from app.config import load_config
-            from app.llm_hybrid import HybridOllamaLLM
+            from app.llm import LLM
 
             config = load_config()
-            llm = HybridOllamaLLM(config)
+            llm = LLM(config.llm)
 
             prompt = f"""Analyze this task and generate the best web search query:
 
