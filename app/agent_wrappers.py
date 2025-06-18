@@ -63,13 +63,43 @@ class ParManusAgentWrapper:
                     self.agent = await Manus.create()
                     logger.debug("Manus agent created successfully.")
                 else:
-                    self.agent = self.agent_class()
+                    self.agent = self.agent_class()  # Set LLM
+            self.agent.llm = self.llm
 
-                # Set LLM
-                self.agent.llm = self.llm
+            # Run agent - handle different run method signatures
+            if hasattr(self.agent, "run") and callable(self.agent.run):
+                # Check if the run method accepts arguments
+                import inspect
 
-            # Run agent
-            result = await self.agent.run(prompt)
+                sig = inspect.signature(self.agent.run)
+                params = list(sig.parameters.keys())
+
+                # For Manus agent, it accepts an optional request parameter
+                if self.agent_class == Manus:
+                    result = await self.agent.run(prompt)
+                # For BaseAgent and others, check if run method accepts parameters
+                elif len(params) > 1:  # More than just 'self'
+                    # Check if it has a request/prompt parameter
+                    param_names = [
+                        p.name for p in sig.parameters.values() if p.name != "self"
+                    ]
+                    if any(
+                        name in ["request", "prompt", "query"] for name in param_names
+                    ):
+                        result = await self.agent.run(prompt)
+                    else:
+                        # Add prompt to memory first, then run
+                        if hasattr(self.agent, "update_memory"):
+                            self.agent.update_memory("user", prompt)
+                        result = await self.agent.run()
+                else:
+                    # BaseAgent style - add prompt to memory first, then run
+                    if hasattr(self.agent, "update_memory"):
+                        self.agent.update_memory("user", prompt)
+                    result = await self.agent.run()
+            else:
+                result = "Agent does not have a valid run method"
+
             return result
 
         except Exception as e:

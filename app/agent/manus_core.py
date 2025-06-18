@@ -791,15 +791,17 @@ If you cannot provide a specific recommendation due to lack of current market da
 
     async def run(self, request: Optional[str] = None) -> str:
         """Enhanced run method that checks for todo.md auto-planning."""
-        # Check if this is a todo.md-related request
-        if request and (
-            "todo.md" in request.lower() or "work on the todo" in request.lower()
-        ):
-            # Try to auto-plan from todo.md
-            auto_planned = await self.auto_plan_from_todo()
-            if auto_planned:
-                logger.info("🎯 Successfully auto-generated plan from todo.md")
-                # Now proceed with normal execution
+        # If request is provided, add it to memory first
+        if request:
+            self.update_memory("user", request)
 
-        # Call parent run method
-        return await super().run(request)
+            # Check if this is a todo.md-related request
+            if "todo.md" in request.lower() or "work on the todo" in request.lower():
+                # Try to auto-plan from todo.md
+                auto_planned = await self.auto_plan_from_todo()
+                if auto_planned:
+                    logger.info("🎯 Successfully auto-generated plan from todo.md")
+                    # Now proceed with normal execution
+
+        # Call parent run method without arguments (BaseAgent.run() doesn't accept parameters)
+        return await super().run()
