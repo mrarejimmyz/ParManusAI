@@ -1,7 +1,6 @@
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from collections import deque
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
@@ -14,155 +13,7 @@ from app.logger import logger
 from app.sandbox.client import SANDBOX_CLIENT
 from app.schema import ROLE_TYPE, AgentState, Memory, Message
 
-
-class CircuitBreaker:
-    """Circuit breaker pattern for handling repeated failures."""
-
-    def __init__(self, failure_threshold: int = 3, recovery_timeout: int = 60):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.failure_count = 0
-        self.last_failure_time = 0
-        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
-
-    def call_failed(self):
-        """Record a failure."""
-        self.failure_count += 1
-        self.last_failure_time = time.time()
-
-        if self.failure_count >= self.failure_threshold:
-            self.state = "OPEN"
-            logger.warning(
-                f"Circuit breaker opened after {self.failure_count} failures"
-            )
-
-    def call_succeeded(self):
-        """Record a success."""
-        self.failure_count = 0
-        self.state = "CLOSED"
-
-    def can_execute(self) -> bool:
-        """Check if execution is allowed."""
-        if self.state == "CLOSED":
-            return True
-        elif self.state == "OPEN":
-            if time.time() - self.last_failure_time > self.recovery_timeout:
-                self.state = "HALF_OPEN"
-                logger.info("Circuit breaker entering half-open state")
-                return True
-            return False
-        else:  # HALF_OPEN
-            return True
-
-
-class StuckStateDetector:
-    """Advanced stuck state detection with multiple strategies."""
-
-    def __init__(self, window_size: int = 5, similarity_threshold: float = 0.8):
-        self.window_size = window_size
-        self.similarity_threshold = similarity_threshold
-        self.recent_responses = deque(maxlen=window_size)
-        self.recent_actions = deque(maxlen=window_size)
-        self.stuck_count = 0
-        self.last_progress_time = time.time()
-
-    def add_response(self, content: str, actions: List[str] = None):
-        """Add a response for analysis."""
-        self.recent_responses.append(content)
-        if actions:
-            self.recent_actions.append(tuple(actions))
-        else:
-            self.recent_actions.append(())
-
-    def is_stuck(self) -> bool:
-        """Detect if the agent is stuck using multiple strategies."""
-        if len(self.recent_responses) < 2:
-            return False
-
-        # Strategy 1: Exact duplicate detection
-        if self._has_exact_duplicates():
-            self.stuck_count += 1
-            logger.debug(f"Exact duplicate detected (count: {self.stuck_count})")
-            return self.stuck_count >= 2
-
-        # Strategy 2: Semantic similarity detection
-        if self._has_semantic_similarity():
-            self.stuck_count += 1
-            logger.debug(f"Semantic similarity detected (count: {self.stuck_count})")
-            return self.stuck_count >= 3
-
-        # Strategy 3: Action repetition detection
-        if self._has_action_repetition():
-            self.stuck_count += 1
-            logger.debug(f"Action repetition detected (count: {self.stuck_count})")
-            return self.stuck_count >= 2
-
-        # Strategy 4: Time-based stagnation
-        if self._is_time_stagnant():
-            logger.warning("Time-based stagnation detected")
-            return True
-
-        # Reset stuck count if no patterns detected
-        self.stuck_count = max(0, self.stuck_count - 1)
-        self.last_progress_time = time.time()
-        return False
-
-    def _has_exact_duplicates(self) -> bool:
-        """Check for exact duplicate responses."""
-        if len(self.recent_responses) < 2:
-            return False
-
-        last_response = self.recent_responses[-1]
-        return any(
-            response == last_response for response in list(self.recent_responses)[:-1]
-        )
-
-    def _has_semantic_similarity(self) -> bool:
-        """Check for semantically similar responses."""
-        if len(self.recent_responses) < 2:
-            return False
-
-        last_response = self.recent_responses[-1].lower()
-
-        # Simple similarity check based on common words
-        for response in list(self.recent_responses)[:-1]:
-            response_lower = response.lower()
-
-            # Calculate word overlap
-            words1 = set(last_response.split())
-            words2 = set(response_lower.split())
-
-            if len(words1) == 0 or len(words2) == 0:
-                continue
-
-            overlap = len(words1.intersection(words2))
-            similarity = overlap / max(len(words1), len(words2))
-
-            if similarity > self.similarity_threshold:
-                return True
-
-        return False
-
-    def _has_action_repetition(self) -> bool:
-        """Check for repeated action patterns."""
-        if len(self.recent_actions) < 2:
-            return False
-
-        last_actions = self.recent_actions[-1]
-        return any(
-            actions == last_actions for actions in list(self.recent_actions)[:-1]
-        )
-
-    def _is_time_stagnant(self) -> bool:
-        """Check if too much time has passed without progress."""
-        return time.time() - self.last_progress_time > 300  # 5 minutes
-
-    def reset(self):
-        """Reset the detector state."""
-        self.recent_responses.clear()
-        self.recent_actions.clear()
-        self.stuck_count = 0
-        self.last_progress_time = time.time()
+from .reliability import CircuitBreaker, StuckStateDetector
 
 
 class BaseAgent(BaseModel, ABC):
@@ -248,155 +99,131 @@ class BaseAgent(BaseModel, ABC):
     ):
         """Add a message to the agent's memory with validation."""
         message_map = {
-            "user": Message.user_message,
-            "system": Message.system_message,
-            "assistant": Message.assistant_message,
-            "tool": lambda content, **kw: Message.tool_message(content, **kw),
+            ROLE_TYPE.USER: "user",
+            ROLE_TYPE.ASSISTANT: "assistant",
+            ROLE_TYPE.SYSTEM: "system",
         }
 
-        if role not in message_map:
-            raise ValueError(f"Unsupported message role: {role}")
+        # Use passed role directly if it's a string, otherwise map it
+        if isinstance(role, str):
+            final_role = role
+        else:
+            final_role = message_map.get(role, "user")
 
-        kwargs = {"base64_image": base64_image, **(kwargs if role == "tool" else {})}
-        self.memory.add_message(message_map[role](content, **kwargs))
+        # Create the message
+        message = Message(role=final_role, content=content)
 
-    async def run(self, request: Optional[str] = None) -> str:
-        """Execute the agent's main loop with enhanced error handling and monitoring."""
-        logger.info(f"Agent {self.name} run() method started")
+        # Add base64 image if provided
+        if base64_image:
+            message.base64_image = base64_image
 
-        if self.state != AgentState.IDLE:
-            raise RuntimeError(f"Cannot run agent from state: {self.state}")
+        # Add any additional properties
+        for key, value in kwargs.items():
+            if hasattr(message, key):
+                setattr(message, key, value)
 
-        if request:
-            self.update_memory("user", request)
-            logger.info(f"Added user request to memory: {request[:100]}...")
+        self.memory.messages.append(message)
+        logger.debug(f"Added {final_role} message to {self.name} memory")
 
-        results: List[str] = []
+    async def run(self) -> str:
+        """
+        Enhanced run loop with reliability features.
+
+        Executes steps until completion, max steps reached, or circuit breaker opens.
+        Includes stuck state detection and adaptive recovery.
+        """
         start_time = time.time()
+        results = []
 
-        logger.info(f"Starting agent execution loop, max_steps: {self.max_steps}")
+        logger.info(f"Starting agent {self.name} with max_steps={self.max_steps}")
 
         async with self.state_context(AgentState.RUNNING):
             while (
                 self.current_step < self.max_steps
-                and self.state != AgentState.FINISHED
                 and self.circuit_breaker.can_execute()
+                and self.state != AgentState.FINISHED
             ):
-                self.current_step += 1
-                self.performance_metrics["total_steps"] += 1
-
-                logger.info(f"Executing step {self.current_step}/{self.max_steps}")
+                step_start_time = time.time()
 
                 try:
-                    step_start = time.time()
-                    logger.info(f"Calling step() method for {self.name}")
+                    # Check for stuck state
+                    if self.stuck_detector.is_stuck():
+                        logger.warning(
+                            f"Stuck state detected at step {self.current_step}"
+                        )
+                        self.performance_metrics["stuck_recoveries"] += 1
 
-                    # Add timeout to step execution to prevent hanging
-                    try:
-                        logger.info(f"About to call self.step() for {self.name}")
-                        step_result = await asyncio.wait_for(
-                            self.step(), timeout=60.0  # 60 second timeout for each step
-                        )
-                        logger.info(
-                            f"self.step() completed successfully for {self.name}"
-                        )
-                    except asyncio.TimeoutError:
-                        step_result = (
-                            f"Step {self.current_step} timed out after 60 seconds"
-                        )
-                        logger.error(
-                            f"Step {self.current_step} timed out after 60 seconds"
-                        )
-                    except AgentTaskComplete as e:
-                        # Handle successful task completion
-                        logger.info(f"✅ Agent {self.name} task completed: {e.message}")
-                        self.state = AgentState.FINISHED
-                        self.performance_metrics["successful_steps"] += 1
-                        results.append(f"Task completed: {e.message}")
-                        return "\n".join(results)
-                    except Exception as step_error:
-                        step_result = f"Step {self.current_step} failed with error: {str(step_error)}"
-                        logger.error(
-                            f"Step {self.current_step} failed with error: {step_error}",
-                            exc_info=True,
-                        )
+                        # Apply recovery strategy
+                        recovery_success = await self.handle_stuck_state_advanced()
+                        if not recovery_success:
+                            logger.error("Failed to recover from stuck state")
+                            break
 
-                    step_duration = time.time() - step_start
-                    logger.info(
-                        f"Step {self.current_step} completed in {step_duration:.2f}s, result: {step_result[:200] if step_result else 'None'}..."
+                    # Execute the step
+                    logger.debug(
+                        f"Agent {self.name} executing step {self.current_step}"
                     )
+                    result = await self.step()
 
-                    # Record successful step
+                    # Record the result for stuck detection
+                    self.stuck_detector.add_response(result)
+
+                    # Update performance metrics
+                    self.performance_metrics["total_steps"] += 1
                     self.performance_metrics["successful_steps"] += 1
+
+                    # Record success in circuit breaker
                     self.circuit_breaker.call_succeeded()
 
-                    # Automatically update todo.md progress for agents that support it
-                    if hasattr(self, "update_todo_progress") and callable(
-                        getattr(self, "update_todo_progress")
-                    ):
-                        try:
-                            logger.debug(
-                                f"Updating todo.md progress after step {self.current_step}"
-                            )
-                            await self.update_todo_progress()
-                            logger.debug("Todo.md progress updated successfully")
-                        except Exception as todo_error:
-                            # Don't fail the step if todo update fails, just log it
-                            logger.warning(
-                                f"Failed to update todo.md progress: {todo_error}"
-                            )
+                    results.append(result)
+                    self.current_step += 1
 
-                    # Skip stuck detection for completed tasks
-                    if self.state != AgentState.FINISHED:
-                        # Add to stuck detector
-                        self.stuck_detector.add_response(step_result)
-
-                        # Check for stuck state
-                        if self.stuck_detector.is_stuck():
-                            logger.warning(
-                                f"Stuck state detected in step {self.current_step}"
-                            )
-                            recovery_success = await self.handle_stuck_state_advanced()
-                            if recovery_success:
-                                self.performance_metrics["stuck_recoveries"] += 1
-                            else:
-                                logger.error(
-                                    "Failed to recover from stuck state, terminating"
-                                )
-                                break
-
-                    results.append(f"Step {self.current_step}: {step_result}")
-
-                    # Log performance if slow
-                    if step_duration > 30:
-                        logger.warning(
-                            f"Step {self.current_step} took {step_duration:.1f}s"
-                        )
+                    step_duration = time.time() - step_start_time
+                    logger.debug(
+                        f"Step {self.current_step} completed in {step_duration:.2f}s"
+                    )
 
                 except AgentTaskComplete as e:
-                    # Handle successful task completion in outer block
-                    logger.info(f"✅ Agent {self.name} task completed: {e.message}")
+                    logger.info(f"Agent {self.name} task completed: {e}")
                     self.state = AgentState.FINISHED
-                    self.performance_metrics["successful_steps"] += 1
-                    results.append(f"Task completed: {e.message}")
-                    return "\n".join(results)
+                    results.append(str(e))
+                    break
+
                 except Exception as e:
-                    # Don't treat AgentTaskComplete as an error
-                    if isinstance(e, AgentTaskComplete):
-                        raise
-                    logger.error(f"Step {self.current_step} failed: {e}", exc_info=True)
-                    self.performance_metrics["failed_steps"] += 1
+                    logger.error(
+                        f"Agent {self.name} step {self.current_step} failed: {e}"
+                    )
+
+                    # Record failure in circuit breaker and metrics
                     self.circuit_breaker.call_failed()
+                    self.performance_metrics["failed_steps"] += 1
 
-                    # Add error to results
-                    results.append(f"Step {self.current_step}: Error - {str(e)}")
+                    # Try adaptive recovery
+                    try:
+                        recovery_result = await self.adaptive_recovery.handle_error(
+                            e,
+                            {
+                                "step": self.current_step,
+                                "agent_name": self.name,
+                                "current_prompt": self.next_step_prompt,
+                            },
+                        )
 
-                    # Break if circuit breaker opens
-                    if not self.circuit_breaker.can_execute():
-                        logger.error("Circuit breaker opened, terminating execution")
-                        break
+                        if recovery_result:
+                            logger.info(
+                                f"Adaptive recovery successful for step {self.current_step}"
+                            )
+                            results.append(f"Recovered from error: {recovery_result}")
+                        else:
+                            results.append(f"Step {self.current_step} failed: {e}")
 
-        # Handle termination reasons
+                    except Exception as recovery_error:
+                        logger.error(f"Recovery failed: {recovery_error}")
+                        results.append(f"Step {self.current_step} failed: {e}")
+
+                    self.current_step += 1
+
+        # Handle termination conditions
         if self.current_step >= self.max_steps:
             logger.info(f"Agent {self.name} reached max steps ({self.max_steps})")
             self.current_step = 0
