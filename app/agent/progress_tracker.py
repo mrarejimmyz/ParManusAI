@@ -1,12 +1,13 @@
-﻿"""
+"""
 Todo Progress Tracker
-Manages updating todo.md file when tasks are completed
+Manages updating todo.md file when tasks are completed and provides progress monitoring
 """
 
 import os
 import re
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
+
 from app.logger import logger
 
 
@@ -17,7 +18,9 @@ class TodoProgressTracker:
         self.workspace_path = workspace_path
         self.todo_file_path = os.path.join(workspace_path, "todo.md")
 
-    async def mark_step_complete(self, step_description: str, phase_name: Optional[str] = None) -> bool:
+    async def mark_step_complete(
+        self, step_description: str, phase_name: Optional[str] = None
+    ) -> bool:
         """Mark a specific step as complete in todo.md"""
         try:
             if not os.path.exists(self.todo_file_path):
@@ -28,13 +31,17 @@ class TodoProgressTracker:
                 content = f.read()
 
             # Find the step and mark it complete
-            updated_content = self._mark_checkbox_complete(content, step_description, phase_name)
-            
+            updated_content = self._mark_checkbox_complete(
+                content, step_description, phase_name
+            )
+
             if updated_content != content:
                 with open(self.todo_file_path, "w", encoding="utf-8") as f:
                     f.write(updated_content)
-                
-                logger.info(f" Marked step complete in todo.md: {step_description[:50]}...")
+
+                logger.info(
+                    f"✅ Marked step complete in todo.md: {step_description[:50]}..."
+                )
                 return True
             else:
                 logger.debug(f"Step not found in todo.md: {step_description[:50]}...")
@@ -44,58 +51,164 @@ class TodoProgressTracker:
             logger.error(f"Error updating todo.md progress: {e}")
             return False
 
-    def _mark_checkbox_complete(self, content: str, step_description: str, phase_name: Optional[str] = None) -> str:
+    def _mark_checkbox_complete(
+        self, content: str, step_description: str, phase_name: Optional[str] = None
+    ) -> str:
         """Find and mark checkbox as complete"""
-        lines = content.split('\n')
+        lines = content.split("\n")
         updated_lines = []
-        
+
         # Look for the step using fuzzy matching
         step_keywords = self._extract_keywords(step_description.lower())
-        
+
         for line in lines:
             # Check for both markdown checkboxes (- [ ]) and numbered checkboxes (1. [ ])
-            if '- [ ]' in line or ('] ' in line and '[ ]' in line):
+            if "- [ ]" in line or ("] " in line and "[ ]" in line):
                 line_text = line.lower()
                 # Check if this line matches the step description
                 if self._is_matching_step(line_text, step_keywords):
                     # Mark as complete - handle both formats
-                    if '- [ ]' in line:
-                        updated_line = line.replace('- [ ]', '- [x]')
-                    elif '] ' in line and '[ ]' in line:
-                        updated_line = line.replace('[ ]', '[x]')
+                    if "- [ ]" in line:
+                        updated_line = line.replace("- [ ]", "- [x]")
+                    elif "] " in line and "[ ]" in line:
+                        updated_line = line.replace("[ ]", "[x]")
                     else:
                         updated_line = line
                     updated_lines.append(updated_line)
-                    logger.info(f" Found and marked complete: {line.strip()}")
+                    logger.info(f"✅ Found and marked complete: {line.strip()}")
                 else:
                     updated_lines.append(line)
             else:
                 updated_lines.append(line)
-        
-        return '\n'.join(updated_lines)
+
+        return "\n".join(updated_lines)
 
     def _extract_keywords(self, text: str) -> List[str]:
         """Extract key words from step description for matching"""
+        # Remove common words
         common_words = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 
-            'for', 'of', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were'
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "as",
+            "is",
+            "are",
+            "was",
+            "were",
         }
-        
-        words = re.findall(r'\b\w+\b', text.lower())
-        keywords = [word for word in words if len(word) > 2 and word not in common_words]
+
+        words = re.findall(r"\b\w+\b", text.lower())
+        keywords = [
+            word for word in words if len(word) > 2 and word not in common_words
+        ]
         return keywords[:5]  # Take top 5 keywords
 
     def _is_matching_step(self, line_text: str, step_keywords: List[str]) -> bool:
         """Check if a line matches the step description using keyword matching"""
         if not step_keywords:
             return False
-            
+
         # Count how many keywords match
         matches = sum(1 for keyword in step_keywords if keyword in line_text)
-        
+
         # Consider it a match if at least 2 keywords match (or 1 for short descriptions)
         threshold = 1 if len(step_keywords) <= 2 else 2
         return matches >= threshold
+
+    async def mark_phase_complete(self, phase_name: str) -> bool:
+        """Mark an entire phase as complete"""
+        try:
+            if not os.path.exists(self.todo_file_path):
+                return False
+
+            with open(self.todo_file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Update the progress tracking section
+            updated_content = self._update_progress_section(content, phase_name)
+
+            if updated_content != content:
+                with open(self.todo_file_path, "w", encoding="utf-8") as f:
+                    f.write(updated_content)
+
+                logger.info(f"🎉 Marked phase complete: {phase_name}")
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error marking phase complete: {e}")
+            return False
+
+    def _update_progress_section(self, content: str, phase_name: str) -> str:
+        """Update the progress tracking section"""
+        lines = content.split("\n")
+        updated_lines = []
+
+        for line in lines:
+            if "- [ ]" in line and "Progress Tracking" in content:
+                # Check if this is a phase completion checkbox
+                if any(
+                    phase_term in line.lower()
+                    for phase_term in [phase_name.lower(), "phase 1", "phase 2"]
+                ):
+                    updated_line = line.replace("- [ ]", "- [x]")
+                    updated_lines.append(updated_line)
+                else:
+                    updated_lines.append(line)
+            else:
+                updated_lines.append(line)
+
+        return "\n".join(updated_lines)
+
+    async def add_progress_note(self, note: str) -> bool:
+        """Add a note to the progress tracking section"""
+        try:
+            if not os.path.exists(self.todo_file_path):
+                return False
+
+            with open(self.todo_file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Find the Notes section and add the note
+            timestamp = datetime.now().strftime("%H:%M")
+            note_line = f"- [{timestamp}] {note}"
+
+            # Look for the Notes section
+            if "### Notes" in content:
+                # Insert note after the Notes header
+                updated_content = content.replace(
+                    "### Notes\n(Progress notes will be added here)",
+                    f"### Notes\n{note_line}\n(Progress notes will be added here)",
+                )
+            else:
+                # Add a Notes section if it doesn't exist
+                updated_content = content + f"\n\n### Notes\n{note_line}\n"
+
+            if updated_content != content:
+                with open(self.todo_file_path, "w", encoding="utf-8") as f:
+                    f.write(updated_content)
+
+                logger.info(f"📝 Added progress note: {note[:50]}...")
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error adding progress note: {e}")
+            return False
 
     def get_completion_status(self) -> Dict[str, any]:
         """Get current completion status from todo.md"""
@@ -107,16 +220,22 @@ class TodoProgressTracker:
                 content = f.read()
 
             # Count completed vs total checkboxes
-            total_tasks = len(re.findall(r'- \[[ x]\]', content)) + len(re.findall(r'\d+\. \[[ x]\]', content))
-            completed_tasks = len(re.findall(r'- \[x\]', content)) + len(re.findall(r'\d+\. \[x\]', content))
-            
-            completion_percentage = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
-            
+            total_tasks = len(re.findall(r"- \[[ x]\]", content)) + len(
+                re.findall(r"\d+\. \[[ x]\]", content)
+            )
+            completed_tasks = len(re.findall(r"- \[x\]", content)) + len(
+                re.findall(r"\d+\. \[x\]", content)
+            )
+
+            completion_percentage = (
+                (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+            )
+
             return {
                 "total_tasks": total_tasks,
                 "completed_tasks": completed_tasks,
                 "completion_percentage": completion_percentage,
-                "is_complete": completion_percentage >= 100
+                "is_complete": completion_percentage >= 100,
             }
 
         except Exception as e:

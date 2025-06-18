@@ -15,6 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from app.logger import logger
+from app.search.intelligent_scraper import IntelligentScraper
 
 
 class DynamicWebSearcher:
@@ -25,6 +26,11 @@ class DynamicWebSearcher:
     def __init__(self, llm=None):
         self.llm = llm
         self.session = None
+
+        # Initialize intelligent scraper
+        self.intelligent_scraper = IntelligentScraper(llm=llm)
+
+        # We'll add intelligent scraping directly here instead of importing
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -39,6 +45,9 @@ class DynamicWebSearcher:
         Main method: search for query, find relevant links, and scrape content
         """
         logger.info(f"🔍 Starting dynamic web search for: {query}")
+
+        # Store current query for context in intelligent scraping
+        self.current_query = query
 
         # Step 1: Perform web search to find links
         search_results = await self._perform_web_search(query)
@@ -384,65 +393,56 @@ Respond with only the numbers of the selected links, separated by commas (e.g., 
 
     async def _scrape_single_link(self, url: str) -> Optional[str]:
         """
-        Scrape content from a single URL with anti-bot bypass techniques
+        Scrape content from a single URL using intelligent scraper
         """
         try:
-            # Rotate user agents
-            user_agents = [
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            ]
+            # Use intelligent scraper with context about the search
+            search_context = getattr(self, "current_query", "")
+            content = await self.intelligent_scraper.intelligent_scrape(
+                url, context=search_context
+            )
 
-            headers = self.headers.copy()
-            headers["User-Agent"] = random.choice(user_agents)
+            if content:
+                logger.info(
+                    f"✅ Successfully scraped content from {url} ({len(content)} chars)"
+                )
+                return content
+            else:
+                logger.warning(f"⚠️ No content extracted from {url}")
+                return None
+
+        except Exception as e:
+            logger.warning(f"Intelligent scraping failed for {url}: {e}")
+            # Fallback to basic scraping
+            return await self._basic_scrape_fallback(url)
+
+    async def _basic_scrape_fallback(self, url: str) -> Optional[str]:
+        """Basic fallback scraping method when intelligent scraper fails"""
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
 
             async with aiohttp.ClientSession(headers=headers) as session:
                 async with session.get(url, timeout=10) as response:
                     if response.status == 200:
-                        html = await response.text()
-                        return self._extract_main_content(html)
-                    elif response.status == 403:
-                        # Try with different headers for 403 errors
-                        return await self._scrape_with_fallback_method(url)
+                        try:
+                            content = await response.text()
+                            return self._extract_main_content(content)
+                        except UnicodeDecodeError:
+                            logger.warning(
+                                f"Unicode decode error for {url}, trying different encoding"
+                            )
+                            content = await response.read()
+                            return content.decode("utf-8", errors="ignore")[:5000]
                     else:
-                        logger.warning(f"HTTP {response.status} for {url}")
+                        logger.warning(
+                            f"Basic fallback failed: HTTP {response.status} for {url}"
+                        )
                         return None
 
         except Exception as e:
-            logger.warning(f"Scraping failed for {url}: {e}")
-            return None
-
-    async def _scrape_with_fallback_method(self, url: str) -> Optional[str]:
-        """
-        Fallback scraping method for blocked requests
-        """
-        try:
-            # Try with requests library and different approach
-            session = requests.Session()
-            session.headers.update(
-                {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                    "Accept-Language": "en-US,en;q=0.5",
-                    "Accept-Encoding": "gzip, deflate",
-                    "DNT": "1",
-                    "Connection": "keep-alive",
-                    "Upgrade-Insecure-Requests": "1",
-                }
-            )
-
-            response = session.get(url, timeout=10)
-            if response.status_code == 200:
-                return self._extract_main_content(response.text)
-            else:
-                logger.warning(
-                    f"Fallback also failed: HTTP {response.status_code} for {url}"
-                )
-                return None
-
-        except Exception as e:
-            logger.warning(f"Fallback scraping failed for {url}: {e}")
+            logger.warning(f"Basic fallback scraping failed for {url}: {e}")
             return None
 
     def _extract_main_content(self, html: str) -> str:
@@ -496,3 +496,12 @@ Respond with only the numbers of the selected links, separated by commas (e.g., 
         except Exception as e:
             logger.error(f"Content extraction failed: {e}")
             return ""
+
+    async def close(self):
+        """
+        Clean up resources
+        """
+        if self.intelligent_scraper:
+            await self.intelligent_scraper.close()
+        if self.session:
+            await self.session.close()

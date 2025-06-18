@@ -25,21 +25,21 @@ class SimplifiedManusActionExecutor:
         self.llm = getattr(agent, "llm", None)  # Initialize modular components
         workspace_root = getattr(agent, "workspace_root", "workspace")
         self.search_engine = DynamicWebSearcher(llm=self.llm)
-        self.query_generator = SearchQueryGenerator()
-
-        # Lazy import to avoid circular dependency
+        self.query_generator = (
+            SearchQueryGenerator()
+        )  # Lazy import to avoid circular dependency
         from app.agent.progress_tracker import TodoProgressTracker
         from app.agent.reporting import ComprehensiveReportManager
-        from app.agent.self_monitor import AgentSelfMonitor
+        from app.agent.smart_monitor import SmartAgentMonitor
 
         self.report_manager = ComprehensiveReportManager(workspace_root)
         self.completion_analyzer = ReportCompletionAnalyzer()
 
-        # Add progress tracking and self-monitoring
+        # Add progress tracking and smart monitoring
         self.progress_tracker = TodoProgressTracker(workspace_root)
-        self.self_monitor = AgentSelfMonitor(llm=self.llm)
-
-        # State tracking
+        self.smart_monitor = SmartAgentMonitor(
+            llm=self.llm, workspace_path=workspace_root
+        )  # State tracking
         self.last_search_results = None
         self.current_task = None
         self.report_name = None
@@ -49,17 +49,28 @@ class SimplifiedManusActionExecutor:
         try:
             logger.info(f"📊 EXTRACTION ACTION: {step}")
 
-            # Monitor this action
-            monitoring_result = await self.self_monitor.monitor_action(
+            # Start task monitoring
+            await self.smart_monitor.start_task_monitoring(
                 f"extraction: {step}"
+            )  # Monitor this action
+            monitoring_result = await self.smart_monitor.monitor_action(
+                f"extraction: {step}", timeout=120.0
             )
-            if monitoring_result["is_stuck"]:
-                logger.warning(
-                    f"🔄 Agent stuck during extraction: {monitoring_result['reason']}"
-                )
+
+            # Check if stuck or if there's a recovery recommendation
+            analysis = monitoring_result.get("analysis", {})
+            if analysis.get("is_stuck"):
+                reason = analysis.get("recommendation", "Agent appears stuck")
+                logger.warning(f"🔄 Agent stuck during extraction: {reason}")
                 await self.progress_tracker.add_progress_note(
-                    f"Agent intervention needed: {monitoring_result['reason']}"
+                    f"Agent intervention needed: {reason}"
                 )
+
+                # Apply smart recovery if suggested
+                recovery = analysis.get("recovery")
+                if recovery:
+                    logger.info(f"🔧 Applying recovery: {recovery['strategy']}")
+                    return await self._handle_recovery(recovery, step)
 
             # Get current task
             self.current_task = self._get_user_message()
@@ -91,23 +102,26 @@ class SimplifiedManusActionExecutor:
 
                 logger.info(
                     f"✅ Extraction successful - found {len(search_results)} search results"
-                )
-
-                # Mark step as complete in todo.md
+                )  # Mark step as complete in todo.md
                 await self.progress_tracker.mark_step_complete(step)
-                await self.self_monitor.monitor_action(
-                    "extraction_complete", f"Found {len(search_results)} results"
+                await self.smart_monitor.monitor_action(
+                    "extraction_complete",
+                    context={"results_count": len(search_results)},
                 )
 
                 return True
             else:
                 logger.warning("⚠️ No search results found")
-                self.self_monitor.mark_error("No search results found")
+                await self.smart_monitor.monitor_action(
+                    "extraction_failed", context={"error": "No search results found"}
+                )
                 return False
 
         except Exception as e:
             logger.error(f"❌ Extraction action failed: {str(e)}")
-            self.self_monitor.mark_error(str(e))
+            await self.smart_monitor.monitor_action(
+                "extraction_error", context={"error": str(e)}
+            )
             return False
 
     async def execute_creation_action(self, step: str) -> bool:
@@ -115,93 +129,164 @@ class SimplifiedManusActionExecutor:
         try:
             logger.info(f"📝 CREATION ACTION: {step}")
 
-            # Monitor this action
-            monitoring_result = await self.self_monitor.monitor_action(
+            # Start task monitoring
+            await self.smart_monitor.start_task_monitoring(
                 f"creation: {step}"
+            )  # Monitor this action
+            monitoring_result = await self.smart_monitor.monitor_action(
+                f"creation: {step}", timeout=180.0
             )
-            if monitoring_result["is_stuck"]:
-                logger.warning(
-                    f"🔄 Agent stuck during creation: {monitoring_result['reason']}"
-                )
+
+            # Check if stuck or if there's a recovery recommendation
+            analysis = monitoring_result.get("analysis", {})
+            if analysis.get("is_stuck"):
+                reason = analysis.get("recommendation", "Agent appears stuck")
+                logger.warning(f"🔄 Agent stuck during creation: {reason}")
                 await self.progress_tracker.add_progress_note(
-                    f"Agent intervention needed: {monitoring_result['reason']}"
+                    f"Agent intervention needed: {reason}"
                 )
 
-            # Ensure we have task and report name
+                # Apply smart recovery if suggested
+                recovery = analysis.get("recovery")
+                if recovery:
+                    logger.info(f"🔧 Applying recovery: {recovery['strategy']}")
+                    return await self._handle_recovery(recovery, step)
+
+            # Ensure we have current task
             if not self.current_task:
                 self.current_task = self._get_user_message()
 
+            # Check for existing report to avoid duplicates FIRST
+            existing_report = await self._find_existing_report(self.current_task)
+            if existing_report:
+                logger.info(
+                    f"📄 Found existing report: {os.path.basename(existing_report)}"
+                )  # Check if it needs completion - improved logic to prevent loops
+                analysis = self.completion_analyzer.analyze_report_completeness(
+                    existing_report
+                )
+                completion_pct = analysis.get("completion_percentage", 0)
+
+                # Improved completion detection
+                is_sufficient = completion_pct >= 80  # Lower threshold for sufficiency
+                is_comprehensive = (
+                    completion_pct >= 90
+                )  # Higher threshold for comprehensive
+
+                # For update tasks, be more lenient about existing reports
+                is_update_task = any(
+                    pattern in self.current_task.lower()
+                    for pattern in ["update", "enhance", "improve", "modify", "revise"]
+                )
+
+                if is_update_task and completion_pct >= 70:
+                    logger.info(
+                        f"📝 Update task detected - existing report at {completion_pct:.1f}% is sufficient for updating"
+                    )
+                    # Just mark it as the target for updating - don't loop
+                    self.report_name = os.path.basename(existing_report)
+                    # Mark step as complete                    await self.progress_tracker.mark_step_complete(step)
+                    await self.smart_monitor.monitor_action(
+                        "creation_complete",
+                        context={
+                            "action": "found_suitable_report",
+                            "report": self.report_name,
+                        },
+                    )
+                    return True
+
+                elif is_comprehensive:
+                    logger.info(
+                        f"✅ Existing report is {completion_pct:.1f}% complete - using it as-is"
+                    )
+                    # Update our tracking
+                    self.report_name = os.path.basename(existing_report)
+                    report_path = existing_report
+                    # Mark step as complete                    await self.progress_tracker.mark_step_complete(step)
+                    await self.smart_monitor.monitor_action(
+                        "creation_complete",
+                        context={"action": "used_existing_comprehensive_report"},
+                    )
+                    return True
+
+                elif is_sufficient:
+                    logger.info(
+                        f"📝 Report is {completion_pct:.1f}% complete - trying one enhancement attempt"
+                    )
+                    # Try to enhance, but limit attempts to prevent loops
+                    success = await self.complete_incomplete_report(existing_report)
+                    if success:
+                        logger.info("✅ Successfully enhanced existing report")
+                        # Mark step as complete in todo.md
+                        await self.progress_tracker.mark_step_complete(step)
+                        await self.smart_monitor.monitor_action(
+                            "creation_complete",
+                            context={"action": "enhanced_existing_report"},
+                        )
+                        return True
+                    else:
+                        logger.info(
+                            "⚠️ Enhancement failed, but report is sufficient - using as-is"
+                        )
+                        self.report_name = os.path.basename(existing_report)
+                        await self.progress_tracker.mark_step_complete(step)
+                        await self.smart_monitor.monitor_action(
+                            "creation_complete",
+                            context={"action": "used_existing_sufficient_report"},
+                        )
+                        return True
+                else:
+                    logger.info(
+                        f"📝 Report is {completion_pct:.1f}% complete - needs significant enhancement"
+                    )
+                    success = await self.complete_incomplete_report(existing_report)
+                    if success:
+                        logger.info("✅ Successfully enhanced existing report")
+                        # Mark step as complete in todo.md                        await self.progress_tracker.mark_step_complete(step)
+                        await self.smart_monitor.monitor_action(
+                            "creation_complete",
+                            context={"action": "enhanced_incomplete_report"},
+                        )
+                        return True
+
+            # No existing report found, generate new report name
             if not self.report_name:
                 self.report_name = self.report_manager.generate_report_name(
                     self.current_task
                 )
+                logger.info(f"📝 Generated NEW report name: {self.report_name}")
 
             # Get search results if available
             search_results = []
             if self.last_search_results and self.last_search_results.get("results"):
                 search_results = self.last_search_results["results"]
 
-            # Check for existing report to avoid duplicates
-            existing_report = await self._find_existing_report(self.current_task)
-            if existing_report:
-                logger.info(
-                    f"📄 Found existing report: {os.path.basename(existing_report)}"
-                )
-
-                # Check if it needs completion
-                analysis = self.completion_analyzer.analyze_report_completeness(
-                    existing_report
-                )
-                completion_pct = analysis.get("completion_percentage", 0)
-
-                if completion_pct < 90:
-                    logger.info(
-                        f"📝 Report is {completion_pct:.1f}% complete, enhancing it..."
-                    )
-                    success = await self.complete_incomplete_report(existing_report)
-                    if success:
-                        logger.info("✅ Successfully enhanced existing report")
-                        # Mark step as complete in todo.md
-                        await self.progress_tracker.mark_step_complete(step)
-                        await self.self_monitor.monitor_action(
-                            "creation_complete", "Enhanced existing report"
-                        )
-                        return True
-                else:
-                    logger.info("✅ Existing report is already complete, using it")
-                    # Update our tracking
-                    self.report_name = os.path.basename(existing_report)
-                    report_path = existing_report
-                    # Mark step as complete
-                    await self.progress_tracker.mark_step_complete(step)
-                    await self.self_monitor.monitor_action(
-                        "creation_complete", "Used existing complete report"
-                    )
-                    return True
-            else:
-                # Create report using comprehensive report manager
-                logger.info("🧠 Creating new intelligent report")
-                report_path = await self.report_manager.create_llm_driven_report(
-                    self.current_task, search_results
-                )
+            # Create report using comprehensive report manager
+            logger.info("🧠 Creating new intelligent report")
+            report_path = await self.report_manager.create_llm_driven_report(
+                self.current_task, search_results
+            )
 
             # Add completion analysis
             self._add_completion_analysis(report_path)
 
             logger.info(f"✅ Created report: {self.report_name}")
-            logger.info(f"✅ Report saved to: {report_path}")
-
-            # Mark step as complete in todo.md
+            logger.info(
+                f"✅ Report saved to: {report_path}"
+            )  # Mark step as complete in todo.md
             await self.progress_tracker.mark_step_complete(step)
-            await self.self_monitor.monitor_action(
-                "creation_complete", f"Created new report: {self.report_name}"
+            await self.smart_monitor.monitor_action(
+                "creation_complete",
+                context={"action": "created_new_report", "report": self.report_name},
             )
 
             return True
 
         except Exception as e:
             logger.error(f"❌ Creation action failed: {str(e)}")
-            self.self_monitor.mark_error(str(e))
+            await self.smart_monitor.monitor_action(
+                "creation_error", context={"error": str(e)}
+            )
             return False
 
     # Simple pass-through methods for other actions
@@ -503,7 +588,87 @@ class SimplifiedManusActionExecutor:
                     with open(report_file, "r", encoding="utf-8") as f:
                         report_content = f.read(1000)  # First 1000 characters
 
-                    report_name = os.path.basename(report_file)
+                    report_name = os.path.basename(
+                        report_file
+                    )  # Enhanced Pre-check: Smart pattern matching for obvious report matches
+                    task_lower = task_description.lower()
+                    report_name_lower = report_name.lower()
+                    report_content_lower = report_content.lower()
+
+                    # QUICK MATCH 1: Direct update task patterns
+                    update_patterns = [
+                        "update the existing report",
+                        "update existing report",
+                        "enhance the report",
+                        "improve the report",
+                        "modify the report",
+                    ]
+
+                    # If task explicitly mentions updating and there's an existing report, prioritize it
+                    is_update_task = any(
+                        pattern in task_lower for pattern in update_patterns
+                    )
+                    if is_update_task and report_name_lower not in [
+                        "todo.md",
+                        "readme.md",
+                    ]:
+                        logger.info(
+                            f"🎯 QUICK MATCH: Update task detected - '{report_name}' is an existing report, treating as RELEVANT"
+                        )
+                        return report_file
+
+                    # QUICK MATCH 2: Specific file name patterns for obvious matches
+                    obvious_matches = [
+                        ("agent", ["agent", "fixes", "complete"]),
+                        (
+                            "ai development",
+                            ["ai", "artificial", "intelligence", "development"],
+                        ),
+                        ("comprehensive", ["comprehensive", "analysis", "report"]),
+                        ("latest", ["latest", "current", "recent"]),
+                    ]
+
+                    for task_pattern, report_keywords in obvious_matches:
+                        if task_pattern in task_lower:
+                            matches = sum(
+                                1
+                                for keyword in report_keywords
+                                if keyword in report_name_lower
+                            )
+                            if matches >= 2:  # At least 2 keywords match
+                                logger.info(
+                                    f"🎯 QUICK MATCH: Task '{task_pattern}' + Report keywords {matches}/{len(report_keywords)} - treating '{report_name}' as RELEVANT"
+                                )
+                                return report_file
+
+                    # QUICK MATCH 3: Content-based quick check (first 500 chars)
+                    content_keywords = []
+                    if "ai" in task_lower or "artificial intelligence" in task_lower:
+                        content_keywords.extend(
+                            [
+                                "artificial intelligence",
+                                "ai",
+                                "machine learning",
+                                "development",
+                            ]
+                        )
+                    if "analysis" in task_lower:
+                        content_keywords.extend(
+                            ["analysis", "comprehensive", "detailed"]
+                        )
+                    if "report" in task_lower:
+                        content_keywords.extend(["report", "documentation", "findings"])
+
+                    content_matches = sum(
+                        1
+                        for keyword in content_keywords
+                        if keyword in report_content_lower[:500]
+                    )
+                    if content_matches >= 3:  # At least 3 content keywords match
+                        logger.info(
+                            f"🎯 QUICK MATCH: Content analysis - '{report_name}' matches {content_matches}/{len(content_keywords)} keywords - treating as RELEVANT"
+                        )
+                        return report_file
 
                     # Ask LLM if this report is relevant to the current task
                     relevance_prompt = f"""
@@ -516,13 +681,28 @@ EXISTING REPORT CONTENT (first 1000 chars):
 {report_content}
 
 Question: Is this existing report relevant to the new task?
-- Answer "YES" only if the report is about the same topic/subject as the new task
-- Answer "NO" if it's about a completely different topic
-- Consider: A GitHub analysis report is NOT relevant to a travel planning task
-- Consider: A travel report to one location is NOT relevant to a different location
-- Be very strict - only match if it's truly the same or very similar task
+
+Guidelines:
+- Answer "YES" if the report covers the same topic/subject as the new task
+- Answer "YES" if this is exactly what the task is asking for
+- Answer "YES" if the report title/content closely matches the task requirements
+- Answer "NO" only if it's about a completely different topic
+- Consider: An AI developments report IS relevant to a task asking for AI developments
+- Consider: A comprehensive report on topic X IS relevant to "create comprehensive report on topic X"
+- Consider: Focus on topic similarity, not exact wording
+
+Examples:
+- Task: "Create AI report" + Report: "Analysis of AI developments" = YES
+- Task: "Research latest AI" + Report: "AI latest developments" = YES
+- Task: "Travel to Paris" + Report: "GitHub analysis" = NO
 
 Answer with just "YES" or "NO":"""
+
+                    logger.info(f"🔍 DEBUG - Task: '{task_description}'")
+                    logger.info(f"🔍 DEBUG - Report: '{report_name}'")
+                    logger.info(
+                        f"🔍 DEBUG - Content preview: '{report_content[:200]}...'"
+                    )
 
                     if self.llm:
                         response = await self.llm.ask(
@@ -530,6 +710,7 @@ Answer with just "YES" or "NO":"""
                         )
                         is_relevant = response.strip().upper() == "YES"
 
+                        logger.info(f"🔍 DEBUG - LLM Response: '{response.strip()}'")
                         logger.info(
                             f"🧠 LLM says '{report_name}' is {'RELEVANT' if is_relevant else 'NOT RELEVANT'} to new task"
                         )
@@ -586,3 +767,43 @@ Answer with just "YES" or "NO":"""
                     break
 
         return "_".join(important_words) if important_words else "report"
+
+    async def _handle_recovery(self, recovery: dict, step: str) -> bool:
+        """Handle smart monitor recovery strategies"""
+        strategy = recovery.get("strategy", "default")
+
+        if strategy == "simplify_task":
+            logger.info("🔧 Simplifying current task")
+            await self.progress_tracker.add_progress_note(f"Simplified task: {step}")
+            return True
+
+        elif strategy == "change_approach":
+            logger.info("🔧 Changing approach for current step")
+            await self.progress_tracker.add_progress_note(f"Changed approach: {step}")
+            return True
+
+        elif strategy == "skip_current_step":
+            logger.info("🔧 Skipping current step as non-critical")
+            await self.progress_tracker.mark_step_complete(
+                step, note="Skipped as non-critical"
+            )
+            return True
+
+        elif strategy == "restart_phase":
+            logger.info("🔧 Restarting current phase")
+            await self.progress_tracker.add_progress_note(f"Restarted phase: {step}")
+            return False  # Signal to retry
+
+        elif strategy == "complete_with_partial":
+            logger.info("🔧 Completing with partial results")
+            await self.progress_tracker.mark_step_complete(
+                step, note="Completed with partial results"
+            )
+            return True
+
+        else:
+            logger.info("🔧 Applying default recovery")
+            await self.progress_tracker.add_progress_note(
+                f"Applied default recovery: {step}"
+            )
+            return True
