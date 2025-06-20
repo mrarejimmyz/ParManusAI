@@ -191,8 +191,7 @@ class BaseAgent(BaseModel, ABC):
             request: Optional initial request
 
         Returns:
-            str: Final result
-        """
+            str: Final result"""
         if request:
             await self.add_user_message(request)
 
@@ -206,7 +205,9 @@ class BaseAgent(BaseModel, ABC):
             results.append(result)
 
             # Break if we get an error or completion signal
-            if "Error:" in result or "finished" in result.lower():
+            if result and (
+                "Error:" in str(result) or "finished" in str(result).lower()
+            ):
                 break
 
         final_result = results[-1] if results else "No steps executed"

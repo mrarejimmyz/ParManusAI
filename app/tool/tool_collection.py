@@ -29,6 +29,11 @@ class ToolCollection:
         tool = self.tool_map.get(name)
         if not tool:
             return ToolFailure(error=f"Tool {name} is invalid")
+
+        # Ensure tool_input is a dict for unpacking
+        if tool_input is None:
+            tool_input = {}
+
         try:
             result = await tool.execute(**tool_input)
             return result

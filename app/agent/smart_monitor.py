@@ -86,10 +86,13 @@ class SmartAgentMonitor:
 
         # Check circuit breaker
         if self.recovery_manager._is_circuit_broken():
-            return await self.recovery_manager._handle_circuit_breaker_recovery()
-
-        # Check for file duplicate prevention
-        topic_keywords = self.pattern_detector.extract_topic_from_action(action.lower())
+            return (
+                await self.recovery_manager._handle_circuit_breaker_recovery()
+            )  # Check for file duplicate prevention
+        action_str = str(action) if not isinstance(action, str) else action
+        topic_keywords = self.pattern_detector.extract_topic_from_action(
+            action_str.lower()
+        )
         if self.file_manager.should_prevent_duplicate(topic_keywords):
             logger.warning(
                 f"🚫 Preventing duplicate file creation for topics: {topic_keywords}"

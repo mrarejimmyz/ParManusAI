@@ -79,11 +79,12 @@ class ThinkingEngine:
             elif isinstance(msg, dict):
                 messages_for_llm.append(msg)
             else:
-                messages_for_llm.append({"role": msg.role, "content": msg.content})
-
-        # Get filtered tools for autonomous execution
+                messages_for_llm.append(
+                    {"role": msg.role, "content": msg.content}
+                )  # Get filtered tools for autonomous execution
+        available_tools_list = self.agent.available_tools.to_params()
         filtered_tools = await self.tool_manager.filter_tools_for_autonomous_execution(
-            self.agent.available_tools, getattr(self.agent, "original_user_request", "")
+            available_tools_list, getattr(self.agent, "original_user_request", "")
         )
 
         # Make LLM call with filtered tools

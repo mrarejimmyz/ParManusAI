@@ -153,6 +153,10 @@ class AgentOrchestrator:
 
     async def monitor_execution(self, step_result: Any) -> Any:
         """Monitor execution and apply recovery if needed."""
+        # Ensure modules are initialized
+        if not self._modules_initialized:
+            await self.initialize_modules()
+
         return await self.smart_monitor.monitor_action(step_result)
 
     async def cleanup_modules(self):

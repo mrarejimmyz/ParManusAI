@@ -481,17 +481,49 @@ try:
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(content)
     print(f"File {os.path.basename(filename)} created successfully!")
-except Exception as e:
-    # Fallback to simple filename
+except Exception as e:    # Fallback to simple filename
     simple_name = "output.txt"
     with open(simple_name, 'w', encoding='utf-8') as f:
         f.write(content)
     print(f"File {simple_name} created successfully!")
 """
 
-    def predict_expected_output_files(self, code: str):
-        """Predict what files should be created based on the code"""
+    async def predict_expected_output_files(self, tool_call):
+        """Predict what files should be created based on the tool call"""
         try:
+            # Extract code from tool call if it's a PythonExecute call
+            code = ""
+            if hasattr(tool_call, "function"):
+                if tool_call.function.name == "python_execute":
+                    import json
+
+                    try:
+                        args = (
+                            json.loads(tool_call.function.arguments)
+                            if isinstance(tool_call.function.arguments, str)
+                            else tool_call.function.arguments
+                        )
+                        code = args.get("code", "") if isinstance(args, dict) else ""
+                    except (json.JSONDecodeError, AttributeError):
+                        code = ""
+            elif isinstance(tool_call, dict):
+                function_data = tool_call.get("function", {})
+                if function_data.get("name") == "python_execute":
+                    import json
+
+                    try:
+                        args = (
+                            json.loads(function_data.get("arguments", "{}"))
+                            if isinstance(function_data.get("arguments"), str)
+                            else function_data.get("arguments", {})
+                        )
+                        code = args.get("code", "") if isinstance(args, dict) else ""
+                    except (json.JSONDecodeError, AttributeError):
+                        code = ""
+
+            if not code:
+                return []
+
             # Look for file creation patterns in the code
             # Find file paths in open() calls
             open_patterns = [
@@ -500,15 +532,48 @@ except Exception as e:
                 r'f\.write\s*\(\s*["\']([^"\']+)["\']',
             ]
 
+            expected_files = []
             for pattern in open_patterns:
                 matches = re.findall(pattern, code)
                 for match in matches:
-                    if match not in self.expected_output_files:
-                        self.expected_output_files.append(match)
+                    if match not in expected_files:
+                        expected_files.append(match)
                         logger.info(f"🎯 Expecting output file: {match}")
 
+            return expected_files
         except Exception as e:
             logger.debug(f"Could not predict output files: {e}")
+            return []
+
+    async def validate_expected_files(self, expected_files: List[str]):
+        """Validate that expected files were created."""
+        try:
+            if not expected_files:
+                logger.debug("No expected files to validate")
+                return True
+
+            files_created = 0
+            for expected_file in expected_files:
+                if os.path.exists(expected_file):
+                    files_created += 1
+                    logger.info(f"✅ Expected file created: {expected_file}")
+                else:
+                    logger.debug(f"Expected file not found: {expected_file}")
+
+            # Consider validation successful if any files were created
+            success = files_created > 0 if expected_files else True
+            if success:
+                logger.debug(
+                    f"✅ File validation passed: {files_created}/{len(expected_files)} files created"
+                )
+            else:
+                logger.debug(f"⚠️ File validation: no expected files created")
+
+            return success
+
+        except Exception as e:
+            logger.debug(f"Error validating expected files: {e}")
+            return False
 
     async def validate_task_completion(self) -> bool:
         """Validate that the task has been completed successfully"""
