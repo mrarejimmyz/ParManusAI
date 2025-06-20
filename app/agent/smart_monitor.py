@@ -2,7 +2,7 @@
 Advanced Smart Agent Monitor - Refactored Version
 Comprehensive monitoring system using modular components for:
 - Timeout management
-- Pattern detection  
+- Pattern detection
 - Progress analysis
 - Recovery strategies
 - File management
@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from app.logger import logger
+
 from .monitoring import (
     ActionHistory,
     FileManager,
@@ -53,10 +54,12 @@ class SmartAgentMonitor:
         # Core tracking
         self.action_history: deque = deque(maxlen=50)
         self.task_state: Optional[TaskState] = None
-        self.current_recovery_index = 0        # Configuration
+        self.current_recovery_index = 0  # Configuration
         self.max_action_time = 120.0
         self.max_idle_time = 300.0
-        self.min_actions_before_stuck_check = 8  # Increased from 3 to be less aggressive
+        self.min_actions_before_stuck_check = (
+            8  # Increased from 3 to be less aggressive
+        )
 
         logger.info("🔧 Smart Agent Monitor initialized with modular components")
 
@@ -68,13 +71,15 @@ class SmartAgentMonitor:
             last_progress=datetime.now(),
             max_steps=max_steps,
         )
-        
+
         self.action_history.clear()
         self.current_recovery_index = 0
-        
+
         logger.info(f"📋 Started monitoring task: {task_name}")
 
-    async def monitor_action(self, action: str, timeout: float = None) -> Dict[str, Any]:
+    async def monitor_action(
+        self, action: str, timeout: float = None
+    ) -> Dict[str, Any]:
         """Monitor action execution with intelligent features"""
         if not self.task_state:
             await self.start_task("default_task")
@@ -86,7 +91,9 @@ class SmartAgentMonitor:
         # Check for file duplicate prevention
         topic_keywords = self.pattern_detector.extract_topic_from_action(action.lower())
         if self.file_manager.should_prevent_duplicate(topic_keywords):
-            logger.warning(f"🚫 Preventing duplicate file creation for topics: {topic_keywords}")
+            logger.warning(
+                f"🚫 Preventing duplicate file creation for topics: {topic_keywords}"
+            )
             return {
                 "status": "duplicate_prevention",
                 "message": f"Prevented duplicate creation for topics: {topic_keywords}",
@@ -111,23 +118,25 @@ class SmartAgentMonitor:
             # This is where the actual action would be executed
             # For now, we just simulate and return success
             result = await self._simulate_action_execution(action, smart_timeout)
-            
+
             duration = (datetime.now() - start_time).total_seconds()
-            
+
             # Record successful action
             self.status_reporter.record_action(
                 action, "success", duration, str(result), self.action_history
             )
-            
+
             # Track file if one was created
             if "file" in str(result).lower():
-                self.file_manager.track_file_creation(f"simulated_file_{len(self.action_history)}.md", topic_keywords)
-            
+                self.file_manager.track_file_creation(
+                    f"simulated_file_{len(self.action_history)}.md", topic_keywords
+                )
+
             # Update progress
             self.status_reporter.update_progress(self.task_state)
-              # Reset circuit breaker on success
+            # Reset circuit breaker on success
             self.recovery_manager.circuit_breaker_count = 0
-            
+
             return {
                 "status": "success",
                 "result": result,
@@ -137,7 +146,9 @@ class SmartAgentMonitor:
 
         except asyncio.TimeoutError:
             duration = smart_timeout
-            return await self.timeout_manager.handle_smart_timeout(action, smart_timeout)
+            return await self.timeout_manager.handle_smart_timeout(
+                action, smart_timeout
+            )
 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
@@ -154,11 +165,11 @@ class SmartAgentMonitor:
     async def _should_check_stuck_state(self) -> bool:
         """Determine if we should check for stuck state"""
         action_count = len(self.action_history)
-        
+
         # Don't check until we have some history
         if action_count < self.min_actions_before_stuck_check:
             return False
-            
+
         # Check periodically - every 5 actions after minimum
         # Only if we have enough actions and it's a check interval
         return (
@@ -169,35 +180,37 @@ class SmartAgentMonitor:
     async def _analyze_stuck_state(self) -> Dict[str, Any]:
         """Analyze if agent is stuck"""
         # Get pattern analysis
-        pattern_analysis = self.pattern_detector.analyze_action_patterns(self.action_history)
-        
+        pattern_analysis = self.pattern_detector.analyze_action_patterns(
+            self.action_history
+        )
+
         # Get comprehensive analysis
         analysis = self.progress_analyzer.comprehensive_analysis(
             self.task_state,
             self.action_history,
             pattern_analysis,
-            self.min_actions_before_stuck_check
+            self.min_actions_before_stuck_check,
         )
-        
+
         # Add recommendation
         recommendation = self.progress_analyzer.get_recommendation(
-            analysis["is_stuck"],
-            pattern_analysis,
-            analysis["progress_analysis"]
+            analysis["is_stuck"], pattern_analysis, analysis["progress_analysis"]
         )
         analysis["recommendation"] = recommendation
-        
+
         return analysis
 
     async def _handle_stuck_state(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Handle detected stuck state"""
         logger.warning("🔄 Stuck state detected, applying recovery")
-        
-        recovery_result = await self.recovery_manager.smart_recovery(analysis, self.task_state)
-        
+
+        recovery_result = await self.recovery_manager.smart_recovery(
+            analysis, self.task_state
+        )
+
         # Update recovery index
         self.current_recovery_index += 1
-        
+
         return {
             "status": "stuck_recovery",
             "analysis": analysis,
@@ -215,7 +228,7 @@ class SmartAgentMonitor:
             self.task_state,
             self.action_history,
             self.recovery_manager.circuit_breaker_count,
-            self.recovery_manager._is_circuit_broken()
+            self.recovery_manager._is_circuit_broken(),
         )
 
     async def force_reset(self):
@@ -230,7 +243,9 @@ class SmartAgentMonitor:
         logger.info("🔄 Smart monitor forcibly reset")
 
     # Legacy compatibility methods
-    async def monitor_with_timeout(self, action: str, timeout: float = None) -> Dict[str, Any]:
+    async def monitor_with_timeout(
+        self, action: str, timeout: float = None
+    ) -> Dict[str, Any]:
         """Legacy method for backward compatibility"""
         return await self.monitor_action(action, timeout)
 
@@ -238,9 +253,9 @@ class SmartAgentMonitor:
         """Legacy stuck detection method"""
         if len(self.action_history) < self.min_actions_before_stuck_check:
             return False
-        
+
         # Simple pattern check for backward compatibility
         return self.pattern_detector.is_action_pattern_repeating(
             self.action_history[-1].action if self.action_history else "",
-            self.action_history
+            self.action_history,
         )

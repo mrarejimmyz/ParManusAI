@@ -156,11 +156,10 @@ class Manus(BaseAgent):
         self.step_executor = StepExecutor(self)
         self.todo_manager = TodoManager(self)
         self.deliverable_verifier = DeliverableVerifier()
-        
+
         # Initialize smart monitoring for loop detection and recovery
         self.smart_monitor = SmartAgentMonitor(
-            llm=self.llm, 
-            workspace_path=config.workspace_root
+            llm=self.llm, workspace_path=config.workspace_root
         )
 
         logger.info(
@@ -309,24 +308,28 @@ class Manus(BaseAgent):
                 action_desc = f"execute_tools({len(self.tool_calls)} tools)"
             else:
                 action_desc = "plan_based_action"
-            
+
             # Monitor the action execution
             monitoring_result = await self.smart_monitor.monitor_action(action_desc)
-            
+
             # Check if monitor detected issues and wants us to skip/modify action
             if monitoring_result.get("status") == "duplicate_prevention":
                 logger.info(f"🔍 Smart Monitor: {monitoring_result.get('message')}")
-                return monitoring_result.get("message", "Action prevented by smart monitor")
+                return monitoring_result.get(
+                    "message", "Action prevented by smart monitor"
+                )
             elif monitoring_result.get("status") == "stuck_recovery":
                 logger.info(f"🔍 Smart Monitor: Applied stuck state recovery")
-                return monitoring_result.get("recovery", {}).get("message", "Recovery applied")
-            
+                return monitoring_result.get("recovery", {}).get(
+                    "message", "Recovery applied"
+                )
+
             # Execute the actual action
             if self.tool_calls:
                 result = await self._execute_tool_calls()
             else:
                 result = await self._execute_plan_based_action()
-            
+
             return result
 
         except AgentTaskComplete:
@@ -691,13 +694,13 @@ class Manus(BaseAgent):
         """Determine if ask_human tool should be excluded for simple tasks"""
         if "ask_human" not in tools:
             return False
-        
+
         request_lower = user_request.lower()
-        
+
         # Simple file/report creation tasks - exclude ask_human
         simple_patterns = [
             "create a file",
-            "write a file", 
+            "write a file",
             "save to file",
             "create a report",
             "write a report",
@@ -706,16 +709,16 @@ class Manus(BaseAgent):
             "output to file",
             "save as",
         ]
-        
+
         for pattern in simple_patterns:
             if pattern in request_lower:
                 logger.info(f"🚫 Excluding ask_human for simple task: {pattern}")
                 return True
-        
+
         # Complex tasks requiring human input - allow ask_human
         complex_patterns = [
             "what is your",
-            "what are your", 
+            "what are your",
             "tell me about your",
             "what do you think",
             "your opinion",
@@ -724,11 +727,11 @@ class Manus(BaseAgent):
             "favorite",
             "which do you prefer",
         ]
-        
+
         for pattern in complex_patterns:
             if pattern in request_lower:
                 logger.info(f"✅ Allowing ask_human for complex task: {pattern}")
                 return False
-        
+
         # Default: exclude for simple file operations, allow for others
         return "file" in request_lower or "report" in request_lower
