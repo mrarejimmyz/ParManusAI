@@ -1,15 +1,17 @@
 """
-Browser Use Tool - Backward Compatibility Wrapper
-Enhanced with unified browser tool architecture
+Browser Use Tool - Enhanced Wrapper with Stealth Mode
+Now uses advanced browser tool with NoDriver integration for anti-bot detection bypass
 """
 
 from app.logger import logger
-from app.tool.implementations.browser import UnifiedBrowserTool
+from app.tool.implementations.browser_enhanced import EnhancedUnifiedBrowserTool
 
-# Use the unified implementation
-BrowserUseTool = UnifiedBrowserTool
+# Use the enhanced implementation with stealth capabilities
+BrowserUseTool = EnhancedUnifiedBrowserTool
 
 # Keep the interface consistent for existing code
 __all__ = ["BrowserUseTool"]
 
-logger.info("🔄 Browser Use Tool now uses unified browser architecture")
+logger.info(
+    "🥷 Browser Use Tool now uses ENHANCED stealth mode with anti-bot detection bypass"
+)

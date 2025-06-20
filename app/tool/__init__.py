@@ -4,8 +4,8 @@ from app.tool.core.base import BaseTool, ToolRegistry, ToolResult
 from app.tool.create_chat_completion import CreateChatCompletion
 
 # Import unified implementations
-from app.tool.implementations.browser import UnifiedBrowserTool
-from app.tool.implementations.search import UnifiedSearchTool
+from app.tool.implementations.browser_enhanced import UnifiedBrowserTool
+from app.tool.implementations.search_enhanced import UnifiedSearchTool
 from app.tool.planning import PlanningTool
 from app.tool.python_execute import PythonExecute
 from app.tool.str_replace_editor import StrReplaceEditor
