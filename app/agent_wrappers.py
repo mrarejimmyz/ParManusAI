@@ -60,7 +60,7 @@ class ParManusAgentWrapper:
                 # Initialize agent
                 if self.agent_class == Manus:
                     logger.debug("Attempting to create Manus agent...")
-                    self.agent = await Manus.create()
+                    self.agent = await self.agent_class.create()
                     logger.debug("Manus agent created successfully.")
                 else:
                     self.agent = self.agent_class()  # Set LLM

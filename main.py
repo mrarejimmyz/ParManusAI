@@ -77,35 +77,46 @@ async def main():
         config, llm, memory = initialize_system(args)
         display_startup_info(config, args, PARMANUS_AVAILABLE)
 
-        # Check for todo.md and auto-start if found
-        auto_started = await check_and_process_todo(
-            args, llm, config, memory, PARMANUS_AVAILABLE
-        )
-
         processed_cmd_prompt = False
+
+        # Process command line prompt first if provided
+        if args.prompt:
+            logger.info(f"📝 Processing command line prompt: {args.prompt[:100]}...")
+            await process_prompt(
+                args.prompt, args, llm, config, memory, PARMANUS_AVAILABLE
+            )
+            processed_cmd_prompt = True
+            if args.no_wait:
+                return
+
+        # Check for todo.md and auto-start if found (only if no command line prompt)
+        if not args.prompt:
+            auto_started = await check_and_process_todo(
+                args, llm, config, memory, PARMANUS_AVAILABLE
+            )
+
+        # Interactive mode for additional prompts
         while True:
             prompt = None
-            if not processed_cmd_prompt and args.prompt:
-                prompt = args.prompt
-                processed_cmd_prompt = True
-                logger.info(f"📝 Processing: {prompt[:100]}...")
-            else:
-                if sys.stdin.isatty():
-                    try:
-                        prompt = input("\n💬 Enter your prompt (or 'quit' to exit): ")
-                        if prompt.lower() in ["quit", "exit", "bye", "q"]:
-                            break
-                    except (EOFError, KeyboardInterrupt):
-                        if args.no_wait:
-                            break
-                        continue
-                else:
-                    if args.no_wait and processed_cmd_prompt:
+            if sys.stdin.isatty():
+                try:
+                    prompt = input("\n💬 Enter your prompt (or 'quit' to exit): ")
+                    if prompt.lower() in ["quit", "exit", "bye", "q"]:
                         break
-                    time.sleep(5)
+                except (EOFError, KeyboardInterrupt):
+                    if args.no_wait:
+                        break
                     continue
+            else:
+                if args.no_wait:
+                    break
+                time.sleep(5)
+                continue
 
-            await process_prompt(prompt, args, llm, config, memory, PARMANUS_AVAILABLE)
+            if prompt:
+                await process_prompt(
+                    prompt, args, llm, config, memory, PARMANUS_AVAILABLE
+                )
 
     except Exception as e:
         logger.error(f"An unhandled error occurred: {e}")

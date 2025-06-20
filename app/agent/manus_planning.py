@@ -17,6 +17,31 @@ class ManusPlanning:
         """Create a comprehensive task plan using ENHANCED REASONING FRAMEWORK"""
         logger.info(f"🎯 CREATING STRATEGIC PLAN WITH DEEP REASONING: {user_request}")
 
+        # Check if this is a todo-related request and we have an active todo
+        if self._should_preserve_existing_todo(user_request):
+            logger.info(
+                "📋 Manus Planning: Working with existing active todo - skipping new plan creation"
+            )
+            # Return a minimal plan that doesn't overwrite the todo
+            existing_goal = self._read_existing_todo_goal()
+            return {
+                "goal": existing_goal or user_request,
+                "task_type": "todo_continuation",
+                "complexity": "simple",
+                "estimated_duration": "ongoing",
+                "phases": [
+                    {
+                        "id": 1,
+                        "title": "Continue current todo phase",
+                        "description": "Work on the current phase in the existing todo",
+                        "steps": ["Continue with current todo phase"],
+                        "tools_needed": ["general"],
+                        "success_criteria": "Current phase completed",
+                    }
+                ],
+                "existing_todo": True,  # Flag to indicate we're working with existing todo
+            }
+
         # Detect task type first
         task_type = await TaskAnalyzer.categorize_task(
             user_request, llm=getattr(self, "llm", None)
@@ -27,10 +52,8 @@ class ManusPlanning:
             "complexity": TaskAnalyzer.assess_task_complexity(user_request),
             "optimization_targets": ["quality", "efficiency", "learning"],
             "reasoning_mode": "expert_level",
-        }
-
-        # Deep analysis using enhanced reasoning engine
-        deep_analysis = await self.agent.reasoning_engine.analyze_task_deeply(
+        }  # Deep analysis using enhanced reasoning framework
+        deep_analysis = await self.agent.reasoning_framework.analyze_task_deeply(
             user_request, context
         )
         deep_analysis["task_type"] = task_type
@@ -38,11 +61,11 @@ class ManusPlanning:
             "🧠 DEEP ANALYSIS COMPLETED: {} reasoning layers applied".format(
                 len(deep_analysis["reasoning_layers"])
             )
-        )
-
-        # Generate optimized strategy
+        )  # Generate optimized strategy
         optimized_strategy = (
-            await self.agent.reasoning_engine.generate_optimized_strategy(deep_analysis)
+            await self.agent.reasoning_framework.generate_optimized_strategy(
+                deep_analysis
+            )
         )
         logger.info(
             "⚡ OPTIMIZED STRATEGY GENERATED: {}".format(optimized_strategy["approach"])
@@ -87,6 +110,11 @@ class ManusPlanning:
 
     async def create_todo_list(self, plan: Dict) -> str:
         """Create a detailed todo list from the plan"""
+        # Check if this plan is for an existing todo
+        if plan.get("existing_todo", False):
+            logger.info("📋 Manus Planning: Skipping todo creation for existing todo")
+            return "Working with existing todo"
+
         todo_content = f"# Task Todo List\n\n"
         todo_content += "**Goal:** {}\n\n".format(plan["goal"])
         todo_content += "**Complexity:** {}\n".format(plan["complexity"])
@@ -194,3 +222,108 @@ class ManusPlanning:
                 )
         except Exception as e:
             logger.error(f"Error updating todo list: {e}", exc_info=True)
+
+    def _should_preserve_existing_todo(self, user_request: str) -> bool:
+        """Check if we should preserve existing todo instead of creating new one"""
+        # Check if this is a todo-related request
+        is_todo_request = (
+            "todo.md" in user_request.lower()
+            or "work on the todo" in user_request.lower()
+            or "continue" in user_request.lower()
+        )
+
+        # Also check for content similarity with existing todo goal
+        if os.path.exists(self.todo_file_path):
+            try:
+                with open(self.todo_file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                # Check if we have an active todo with current/pending phases
+                has_active_phases = "[CURRENT]" in content and "[PENDING]" in content
+
+                if not has_active_phases:
+                    return False
+
+                # If explicit todo request, preserve it
+                if is_todo_request:
+                    return True
+
+                # Check for content similarity with existing goal
+                import re
+
+                goal_match = re.search(r"\*\*Goal:\*\*\s*(.+)", content)
+                if goal_match:
+                    existing_goal = goal_match.group(1).strip().lower()
+                    new_request = user_request.lower()
+
+                    # Check for key word overlap
+                    existing_words = set(existing_goal.split())
+                    new_words = set(new_request.split())
+
+                    # Remove common words
+                    common_words = {
+                        "a",
+                        "an",
+                        "and",
+                        "or",
+                        "but",
+                        "in",
+                        "on",
+                        "at",
+                        "to",
+                        "for",
+                        "of",
+                        "with",
+                        "by",
+                        "the",
+                        "is",
+                        "are",
+                        "was",
+                        "were",
+                        "be",
+                        "been",
+                        "have",
+                        "has",
+                        "had",
+                        "do",
+                        "does",
+                        "did",
+                        "will",
+                        "would",
+                        "could",
+                        "should",
+                        "may",
+                        "might",
+                        "can",
+                    }
+                    existing_words -= common_words
+                    new_words -= common_words
+
+                    # Check for significant overlap
+                    overlap = len(existing_words & new_words)
+                    if overlap >= 2:  # At least 2 meaningful words match
+                        logger.info(
+                            f"📋 Content similarity detected: '{existing_goal}' <-> '{new_request}' (overlap: {overlap})"
+                        )
+                        return True
+
+            except Exception:
+                pass
+
+        return False
+
+    def _read_existing_todo_goal(self) -> str:
+        """Read goal from existing todo.md file"""
+        if os.path.exists(self.todo_file_path):
+            try:
+                with open(self.todo_file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                # Extract goal
+                import re
+
+                goal_match = re.search(r"\*\*Goal:\*\*\s*(.+)", content)
+                if goal_match:
+                    return goal_match.group(1).strip()
+            except Exception:
+                pass
+        return "Work on existing todo"

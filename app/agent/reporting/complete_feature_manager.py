@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 # Import all modular components from their new locations
-from app.agent.actions.action_executor_features import ActionExecutorFeatures
+from app.agent.deliverable_verifier import DeliverableVerifier
 from app.agent.reporting.generators.data_driven_report_generator import (
     DataDrivenReportGenerator,
 )
@@ -42,7 +42,7 @@ class CompleteFeatureManager:
         self.data_generator = DataDrivenReportGenerator(workspace_path)
         self.simple_generator = SimpleReportGenerator(workspace_path)
         self.query_generator = SearchQueryGenerator()
-        self.action_executor = ActionExecutorFeatures()
+        self.deliverable_verifier = DeliverableVerifier()
 
         logger.info("🔧 Complete Feature Manager initialized with ALL modules")
 

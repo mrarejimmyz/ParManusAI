@@ -6,6 +6,8 @@ from app.agent.toolcall import ToolCallAgent
 from app.logger import logger
 from app.tool.base import BaseTool
 from app.tool.python_execute import PythonExecute
+from app.tool.terminate import Terminate
+from app.tool.tool_collection import ToolCollection
 
 
 class CodeAgent(ToolCallAgent):
@@ -20,6 +22,10 @@ class CodeAgent(ToolCallAgent):
 
         # Initialize code execution tools
         self.tools = self._initialize_code_tools()
+
+        # Update available_tools with code execution tools
+        code_tools = [*self.tools, Terminate()]
+        self.available_tools = ToolCollection(*code_tools)
 
         # Set code-specific system prompt
         self.system_prompt = self._get_code_system_prompt()

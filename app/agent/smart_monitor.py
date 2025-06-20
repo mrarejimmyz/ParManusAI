@@ -53,12 +53,10 @@ class SmartAgentMonitor:
         # Core tracking
         self.action_history: deque = deque(maxlen=50)
         self.task_state: Optional[TaskState] = None
-        self.current_recovery_index = 0
-
-        # Configuration
+        self.current_recovery_index = 0        # Configuration
         self.max_action_time = 120.0
         self.max_idle_time = 300.0
-        self.min_actions_before_stuck_check = 3
+        self.min_actions_before_stuck_check = 8  # Increased from 3 to be less aggressive
 
         logger.info("🔧 Smart Agent Monitor initialized with modular components")
 
@@ -127,8 +125,7 @@ class SmartAgentMonitor:
             
             # Update progress
             self.status_reporter.update_progress(self.task_state)
-            
-            # Reset circuit breaker on success
+              # Reset circuit breaker on success
             self.recovery_manager.circuit_breaker_count = 0
             
             return {
@@ -156,9 +153,17 @@ class SmartAgentMonitor:
 
     async def _should_check_stuck_state(self) -> bool:
         """Determine if we should check for stuck state"""
+        action_count = len(self.action_history)
+        
+        # Don't check until we have some history
+        if action_count < self.min_actions_before_stuck_check:
+            return False
+            
+        # Check periodically - every 5 actions after minimum
+        # Only if we have enough actions and it's a check interval
         return (
-            len(self.action_history) >= self.min_actions_before_stuck_check
-            and len(self.action_history) % 3 == 0  # Check every 3 actions
+            action_count >= self.min_actions_before_stuck_check
+            and action_count % 5 == 0  # Check every 5 actions instead of 3
         )
 
     async def _analyze_stuck_state(self) -> Dict[str, Any]:

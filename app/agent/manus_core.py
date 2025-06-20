@@ -19,6 +19,7 @@ from app.agent.manus_planning import ManusPlanning
 from app.agent.manus_utils import ManusUtils
 from app.agent.planning_coordinator import PlanningCoordinator
 from app.agent.query_analyzer import QueryAnalyzer
+from app.agent.smart_monitor import SmartAgentMonitor
 from app.agent.step_executor import StepExecutor
 from app.agent.todo_manager import TodoManager
 from app.config import config
@@ -77,6 +78,7 @@ class Manus(BaseAgent):
     step_executor: Optional[Any] = Field(default=None)
     todo_manager: Optional[Any] = Field(default=None)
     deliverable_verifier: Optional[Any] = Field(default=None)
+    smart_monitor: Optional[Any] = Field(default=None)
 
     # MCP clients for remote tool access
     mcp_clients: MCPClients = Field(default_factory=MCPClients)
@@ -154,6 +156,12 @@ class Manus(BaseAgent):
         self.step_executor = StepExecutor(self)
         self.todo_manager = TodoManager(self)
         self.deliverable_verifier = DeliverableVerifier()
+        
+        # Initialize smart monitoring for loop detection and recovery
+        self.smart_monitor = SmartAgentMonitor(
+            llm=self.llm, 
+            workspace_path=config.workspace_root
+        )
 
         logger.info(
             "🧠 ENHANCED AI SYSTEM INITIALIZED: Deep reasoning and learning enabled"
@@ -216,13 +224,26 @@ class Manus(BaseAgent):
 
             # Get response with tool options
             try:
+                # Prepare messages with system prompt if available
+                messages_for_llm = []
+                if self.config.system_prompt:
+                    messages_for_llm.append(
+                        {"role": "system", "content": self.config.system_prompt}
+                    )
+
+                # Convert Message objects to dicts and add to messages
+                for msg in self.messages:
+                    if hasattr(msg, "model_dump"):
+                        messages_for_llm.append(msg.model_dump())
+                    elif isinstance(msg, dict):
+                        messages_for_llm.append(msg)
+                    else:
+                        messages_for_llm.append(
+                            {"role": msg.role, "content": msg.content}
+                        )
+
                 response = await self.llm.ask_tool(
-                    messages=self.messages,
-                    system_msgs=(
-                        [Message(role="system", content=self.config.system_prompt)]
-                        if self.config.system_prompt
-                        else None
-                    ),
+                    messages=messages_for_llm,
                     tools=self.available_tools.to_params(),
                     tool_choice=self.tool_choices,
                 )
@@ -281,14 +302,32 @@ class Manus(BaseAgent):
             return False
 
     async def act(self) -> str:
-        """Execute tool calls or perform plan-based actions"""
+        """Execute tool calls or perform plan-based actions with smart monitoring"""
         try:
-            # If we have tool calls, execute them
+            # Determine the action description for monitoring
             if self.tool_calls:
-                return await self._execute_tool_calls()
-
-            # Otherwise, perform traditional plan-based actions
-            return await self._execute_plan_based_action()
+                action_desc = f"execute_tools({len(self.tool_calls)} tools)"
+            else:
+                action_desc = "plan_based_action"
+            
+            # Monitor the action execution
+            monitoring_result = await self.smart_monitor.monitor_action(action_desc)
+            
+            # Check if monitor detected issues and wants us to skip/modify action
+            if monitoring_result.get("status") == "duplicate_prevention":
+                logger.info(f"🔍 Smart Monitor: {monitoring_result.get('message')}")
+                return monitoring_result.get("message", "Action prevented by smart monitor")
+            elif monitoring_result.get("status") == "stuck_recovery":
+                logger.info(f"🔍 Smart Monitor: Applied stuck state recovery")
+                return monitoring_result.get("recovery", {}).get("message", "Recovery applied")
+            
+            # Execute the actual action
+            if self.tool_calls:
+                result = await self._execute_tool_calls()
+            else:
+                result = await self._execute_plan_based_action()
+            
+            return result
 
         except AgentTaskComplete:
             self.state = AgentState.FINISHED
@@ -340,24 +379,30 @@ class Manus(BaseAgent):
     async def _execute_single_tool(self, command: ToolCall) -> str:
         """Execute a single tool call with robust error handling"""
         try:
-            if (
-                not command
-                or not hasattr(command, "function")
-                or not command.function
-                or not command.function.name
+            # Handle both dict and object formats
+            if isinstance(command, dict):
+                # Dict format from LLM response
+                if "function" not in command or not command["function"]:
+                    return "Error: Invalid command format"
+                function_data = command["function"]
+                name = function_data.get("name")
+                arguments_str = function_data.get("arguments", "{}")
+            elif (
+                hasattr(command, "function")
+                and command.function
+                and command.function.name
             ):
+                # Object format
+                name = command.function.name
+                arguments_str = command.function.arguments
+            else:
                 return "Error: Invalid command format"
 
-            name = command.function.name
-            if name not in self.available_tools.tool_map:
+            if not name or name not in self.available_tools.tool_map:
                 return f"Error: Unknown tool '{name}'"
 
             try:
-                arguments = (
-                    json.loads(command.function.arguments)
-                    if command.function.arguments
-                    else {}
-                )
+                arguments = json.loads(arguments_str) if arguments_str else {}
 
                 # Execute the tool
                 logger.info(f"🔧 Activating tool: '{name}'...")
@@ -491,7 +536,15 @@ class Manus(BaseAgent):
 
         # Execute the current step using the step executor
         step_result = await self.step_executor.execute_step(current_step)
-        return "Step executed successfully" if step_result else "Step execution failed"
+
+        if step_result:
+            # Step executed successfully, progress to next step
+            logger.info(f"✅ Step '{current_step}' completed successfully")
+            await self.utils_module.progress_to_next_step(verified=True)
+            return "Step executed successfully and progressed to next step"
+        else:
+            logger.error(f"❌ Step '{current_step}' execution failed")
+            return "Step execution failed"
 
     async def step(self) -> str:
         """Execute a single step, creating a plan if needed - overrides BaseAgent.step()"""
@@ -633,3 +686,49 @@ class Manus(BaseAgent):
                         f"🚨 Error cleaning up tool '{tool_name}': {e}", exc_info=True
                     )
         logger.info(f"✨ Cleanup complete for agent '{self.config.name}'.")
+
+    def _should_exclude_ask_human(self, user_request: str, tools: List[str]) -> bool:
+        """Determine if ask_human tool should be excluded for simple tasks"""
+        if "ask_human" not in tools:
+            return False
+        
+        request_lower = user_request.lower()
+        
+        # Simple file/report creation tasks - exclude ask_human
+        simple_patterns = [
+            "create a file",
+            "write a file", 
+            "save to file",
+            "create a report",
+            "write a report",
+            "generate a report",
+            "make a file",
+            "output to file",
+            "save as",
+        ]
+        
+        for pattern in simple_patterns:
+            if pattern in request_lower:
+                logger.info(f"🚫 Excluding ask_human for simple task: {pattern}")
+                return True
+        
+        # Complex tasks requiring human input - allow ask_human
+        complex_patterns = [
+            "what is your",
+            "what are your", 
+            "tell me about your",
+            "what do you think",
+            "your opinion",
+            "your preference",
+            "user preference",
+            "favorite",
+            "which do you prefer",
+        ]
+        
+        for pattern in complex_patterns:
+            if pattern in request_lower:
+                logger.info(f"✅ Allowing ask_human for complex task: {pattern}")
+                return False
+        
+        # Default: exclude for simple file operations, allow for others
+        return "file" in request_lower or "report" in request_lower

@@ -37,47 +37,41 @@ class QueryAnalyzer:
             r"^what\s+does\s+\w+\s+mean",
         ]
 
+        # Patterns that indicate complex queries requiring tool execution
+        self._complex_patterns = [
+            r"print.*hello.*world",
+            r"print.*['\"].*['\"]",
+            r"execute.*python",
+            r"run.*python",
+            r"python.*print",
+            r"use.*python",
+            r"python.*script",
+            r"create.*script",
+            r"write.*code",
+            r"tool.*execute",
+            r"run.*code",
+            r"execute.*code",
+        ]
+
     async def is_simple_query(self, user_request: str) -> bool:
         """Detect if this is a simple query that doesn't need complex planning."""
-
         request_lower = user_request.lower().strip()
 
-        # Check patterns first
+        # First check for complex patterns - these override simple classification
+        for pattern in self._complex_patterns:
+            if re.search(pattern, request_lower):
+                logger.info(
+                    "🔍 Pattern-based detection: This is a complex query requiring tool execution"
+                )
+                return False
+
+        # Check simple patterns
         for pattern in self._simple_patterns:
             if re.search(pattern, request_lower):
+                logger.info("🔍 Pattern-based detection: This is a simple query")
                 return True
 
-        # Use LLM to determine if this is a simple query
-        if self.llm:
-            try:
-                prompt = f"""Is this user request a simple query that can be answered quickly (within 1-2 minutes) with a brief response?
-
-Consider it simple if it's:
-- A basic factual question
-- A quick lookup or definition
-- A short "what/who/when/where/how/why" question
-- Something that doesn't require detailed research or complex analysis
-
-User request: "{user_request}"
-
-Respond with only "yes" or "no"."""
-
-                response = await self.llm.ask(prompt)
-                is_simple = response.strip().lower() == "yes"
-
-                if is_simple:
-                    logger.info("🔍 LLM determined this is a simple query")
-                    return True
-                else:
-                    logger.info(
-                        "🔍 LLM determined this is a complex query requiring detailed analysis"
-                    )
-                    return False
-
-            except Exception as e:
-                logger.warning(f"LLM simple query detection failed: {e}")
-                return self._fallback_is_simple_query(user_request)
-
+        # For queries that don't match patterns, use fallback
         return self._fallback_is_simple_query(user_request)
 
     def _fallback_is_simple_query(self, user_request: str) -> bool:

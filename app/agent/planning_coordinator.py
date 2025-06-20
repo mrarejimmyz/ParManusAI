@@ -27,6 +27,37 @@ class PlanningCoordinator:
         """Create comprehensive task plan using LLM-driven planner"""
         logger.info(f"🎯 Creating LLM-driven comprehensive plan for: {user_request}")
 
+        # Check if this is a todo-related request and we have an active todo
+        if hasattr(
+            self.agent, "todo_manager"
+        ) and self.agent.todo_manager.check_for_todo_request(user_request):
+
+            # Check if we have an active todo with current/pending phases
+            import os
+
+            todo_path = self.agent.todo_manager.todo_file_path
+            if os.path.exists(todo_path):
+                with open(todo_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if "[CURRENT]" in content and "[PENDING]" in content:
+                    logger.info(
+                        "📋 Working with existing active todo - skipping new plan creation"
+                    )
+                    # Return a minimal plan that doesn't overwrite the todo
+                    goal = await self.agent.todo_manager.read_todo_goal()
+                    return {
+                        "goal": goal or "Work on existing todo",
+                        "phases": [
+                            {
+                                "id": 1,
+                                "title": "Continue current todo phase",
+                                "description": "Work on the current phase in the existing todo",
+                                "steps": ["Continue with current todo phase"],
+                            }
+                        ],
+                        "existing_todo": True,  # Flag to indicate we're working with existing todo
+                    }
+
         # Ensure LLM planner is initialized
         self.ensure_llm_planner()
 
@@ -70,33 +101,9 @@ class PlanningCoordinator:
 
     async def get_current_report_guidance(self) -> str:
         """Get guidance on what needs to be completed in the current report"""
-        try:
-            if not hasattr(self.agent, "action_executor"):
-                return "No active action executor"
-
-            status = self.agent.action_executor.get_current_report_status()
-
-            if "error" in status:
-                return f"Report status error: {status['error']}"
-
-            completion_pct = status.get("completion_percentage", 0)
-            completed_sections = status.get("completed_sections", 0)
-            total_sections = status.get("total_sections", 0)
-            missing_sections = status.get("missing_sections", [])
-            placeholder_sections = status.get("placeholder_sections", [])
-
-            guidance = f"Current report is {completion_pct:.1f}% complete ({completed_sections}/{total_sections} sections).\n"
-
-            if placeholder_sections:
-                guidance += f"Priority: Replace placeholders in {', '.join(placeholder_sections[:3])}\n"
-
-            if missing_sections:
-                guidance += f"Still needed: {', '.join(missing_sections[:3])}\n"
-
-            if completion_pct < 50:
-                guidance += "Focus on Executive Summary and Key Findings first."
-
-            return guidance
+        try:  # Note: action_executor was removed during refactoring
+            # Report guidance is now handled by other components
+            return "Report guidance available through other systems"
 
         except Exception as e:
             logger.error(f"Error getting report guidance: {e}")

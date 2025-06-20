@@ -47,6 +47,17 @@ class TodoManager:
             with open(self.todo_file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
+            # Check if todo has current phase markers (indicating it's an active todo)
+            has_current_phase = "[CURRENT]" in content
+            has_pending_phases = "[PENDING]" in content
+
+            if has_current_phase and has_pending_phases:
+                logger.info(
+                    "📋 Found active todo with current phase - working with existing structure"
+                )
+                # For active todos, don't overwrite - just use the existing structure
+                return True
+
             empty_steps = re.findall(r"\*\*Steps:\*\*\s*$", content, re.MULTILINE)
 
             if len(empty_steps) > 0:

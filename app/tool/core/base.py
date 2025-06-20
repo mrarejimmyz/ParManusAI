@@ -367,6 +367,17 @@ class BaseTool(BaseModel, ABC):
             "llm_enabled": self.config.llm_enabled,
         }
 
+    def to_param(self) -> Dict[str, Any]:
+        """Convert tool to function call format for LLM usage."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.config.name,
+                "description": self.config.description,
+                "parameters": self.config.parameters,
+            },
+        }
+
     def clear_cache(self):
         """Clear cached results."""
         self.cache.clear()

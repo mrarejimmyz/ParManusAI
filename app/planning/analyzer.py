@@ -61,8 +61,8 @@ class PlanAnalyzer:
                     "tools_needed": ["tool1", "tool2"],
                     "success_criteria": "How to know this phase is complete",
                     "estimated_time": "time for this phase"
-                }}
-            ],            "final_deliverable": "What the user will receive at the end",
+                }}            ],
+            "final_deliverable": "What the user will receive at the end",
             "success_criteria": "How to know the entire task is complete"
         }}
         """

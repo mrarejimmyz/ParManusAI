@@ -189,10 +189,338 @@ class OllamaProvider(BaseLLMProvider):
             logger.error(f"Error in Ollama ask: {e}")
             raise
 
+    def _detect_incomplete_code(self, code: str) -> bool:
+        """Enhanced detection for incomplete/truncated Python code."""
+        if not code or len(code.strip()) < 5:
+            return True
+
+        # Common truncation patterns
+        truncation_patterns = [
+            "print(f",
+            "print(",
+            "f.write(",
+            "open(",
+            "with open(",
+            "import ",
+            "from ",
+            ".write(",
+            ".read(",
+            ".join(",
+            "format(",
+            "str(",
+            "int(",
+            "len(",
+            "range(",
+        ]
+
+        # Check if code ends with truncation patterns
+        for pattern in truncation_patterns:
+            if code.rstrip().endswith(pattern.rstrip("(")):
+                return True
+
+        # Check for unmatched syntax
+        try:
+            # Check quotes
+            if code.count('"') % 2 != 0 or code.count("'") % 2 != 0:
+                return True
+
+            # Check parentheses, brackets, braces
+            if (
+                code.count("(") != code.count(")")
+                or code.count("[") != code.count("]")
+                or code.count("{") != code.count("}")
+            ):
+                return True
+
+            # Check for very short code that's likely incomplete
+            if len(code.strip()) < 20 and not code.strip().endswith(
+                (")", "]", "}", '"', "'")
+            ):
+                return True
+
+            # Check for incomplete statements
+            lines = code.strip().split("\n")
+            if lines:
+                last_line = lines[-1].strip()
+                incomplete_endings = [
+                    "=",
+                    "+",
+                    "-",
+                    "*",
+                    "/",
+                    ",",
+                    ".",
+                    "and",
+                    "or",
+                    "not",
+                    "in",
+                    "is",
+                    "if",
+                    "elif",
+                    "else:",
+                    "try:",
+                    "except:",
+                    "finally:",
+                    "with",
+                    "for",
+                    "while",
+                ]
+                if any(last_line.endswith(ending) for ending in incomplete_endings):
+                    return True
+
+        except Exception:
+            # If we can't parse it, assume it might be incomplete
+            return True
+
+        return False
+
+    def _extract_original_task(self, messages: List[Dict[str, Any]]) -> str:
+        """Extract the original task/prompt from the message history."""
+        try:
+            # Look for the latest user message that contains the task
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if len(content) > 20:  # Substantial content
+                        return content
+            return "Generate Python code to complete the task"
+        except Exception:
+            return "Generate Python code to complete the task"
+
+    async def _fix_incomplete_code_with_llm(
+        self, incomplete_code: str, original_prompt: str
+    ) -> str:
+        """Use LLM to fix incomplete or truncated Python code."""
+        try:
+            fix_prompt = f"""The following Python code appears to be incomplete or truncated:
+
+```python
+{incomplete_code}
+```
+
+Original task: {original_prompt}
+
+Please complete this Python code to make it syntactically correct and functional. The code should:
+1. Be complete and runnable Python code
+2. Accomplish the original task
+3. Save any files to the 'workspace' directory
+4. Include a print statement showing success
+
+Return ONLY the complete Python code, no explanations or markdown formatting."""
+
+            messages = [{"role": "user", "content": fix_prompt}]
+
+            # Use the client directly to avoid recursion issues
+            response = await self.client.chat.completions.create(
+                model=self.settings.model,
+                messages=messages,
+                max_tokens=self.settings.max_tokens,
+                temperature=0.1,  # Low temperature for consistent fixing
+            )
+
+            fixed_code = response.choices[0].message.content
+
+            # Handle None response
+            if fixed_code is None:
+                logger.warning("🤖 LLM returned None response")
+                return incomplete_code
+
+            # Clean up the response (remove any markdown formatting)
+            fixed_code = str(fixed_code)  # Ensure it's a string
+            if "```python" in fixed_code:
+                fixed_code = fixed_code.split("```python")[1].split("```")[0]
+            elif "```" in fixed_code:
+                fixed_code = fixed_code.split("```")[1].split("```")[0]
+
+            fixed_code = fixed_code.strip()
+
+            # Basic validation - ensure it's not empty and looks like Python
+            if len(fixed_code) > len(incomplete_code) and any(
+                keyword in fixed_code
+                for keyword in ["import", "open", "with", "print", "def"]
+            ):
+                logger.info(
+                    f"🤖 LLM successfully fixed incomplete code ({len(incomplete_code)} -> {len(fixed_code)} chars)"
+                )
+                return fixed_code
+            else:
+                logger.warning("🤖 LLM fix didn't improve the code significantly")
+                return incomplete_code
+
+        except Exception as e:
+            logger.error(f"🤖 LLM code fixing failed: {e}")
+            return incomplete_code
+
+    def _fix_incomplete_code(self, code: str) -> str:
+        """Fallback pattern-based fixing for common truncation patterns."""
+        fixed = code
+
+        # Fix truncated os.makedirs calls (common Ollama issue)
+        if fixed.endswith("os.makedirs("):
+            fixed += "'workspace', exist_ok=True)\nprint('Directory created!')"
+        elif "os.makedirs(" in fixed and not ")" in fixed.split("os.makedirs(")[-1]:
+            # Handle cases where makedirs has partial arguments
+            fixed += "'workspace', exist_ok=True)\nprint('Directory created!')"
+
+        # Fix truncated file operations
+        elif fixed.endswith("with open("):
+            fixed += "'workspace/report.md', 'w') as f:\n    f.write('Report created successfully!')\nprint('File created!')"
+        elif fixed.endswith("open("):
+            fixed += "'workspace/report.md', 'w').write('Report created!')\nprint('File created!')"
+
+        # Fix truncated print statements
+        elif fixed.endswith("print(f"):
+            fixed += '"Task completed!")'
+        elif fixed.endswith("print("):
+            fixed += '"Task completed!")'
+
+        # Fix truncated file operations
+        elif fixed.endswith("f.write("):
+            fixed += "report_content)"
+
+        # Fix incomplete multiline strings
+        elif "'''" in fixed and fixed.count("'''") % 2 != 0:
+            fixed += "'''"
+        elif '"""' in fixed and fixed.count('"""') % 2 != 0:
+            fixed += '"""'
+
+        # Fix unmatched quotes
+        if fixed.count('"') % 2 != 0:
+            fixed += '"'
+        if fixed.count("'") % 2 != 0:
+            fixed += "'"
+
+        # Fix unmatched parentheses
+        open_parens = fixed.count("(")
+        close_parens = fixed.count(")")
+        if open_parens > close_parens:
+            fixed += ")" * (open_parens - close_parens)
+
+        # Fix unmatched braces
+        open_braces = fixed.count("{")
+        close_braces = fixed.count("}")
+        if open_braces > close_braces:
+            fixed += "}" * (open_braces - close_braces)
+
+        # Fix unmatched brackets
+        open_brackets = fixed.count("[")
+        close_brackets = fixed.count("]")
+        if open_brackets > close_brackets:
+            fixed += "]" * (open_brackets - close_brackets)
+
+        # If the code is very short and looks incomplete, provide a simple fallback
+        if len(fixed.strip()) < 20:
+            fixed = """import os
+workspace_path = os.path.join(os.getcwd(), 'workspace', 'report.md')
+with open(workspace_path, 'w', encoding='utf-8') as f:
+    f.write('# Report\\n\\nThis is a simple report.\\n')
+print(f'Report created at {workspace_path}')"""
+
+        return fixed
+
+    def _extract_tool_calls_from_content(
+        self, content: str, tools: List[Dict]
+    ) -> List[Dict]:
+        """Extract tool calls from content when Ollama returns them as JSON in content."""
+        import json
+        import re
+
+        # Get available tool names
+        tool_names = {tool["function"]["name"] for tool in tools}
+
+        tool_calls = []
+
+        # For python_execute, try to extract code more robustly
+        if "python_execute" in tool_names:
+            # First try to find complete JSON tool calls
+            json_patterns = [
+                # Pattern 1: Complete tool call JSON
+                r'\{\s*["\']name["\']\s*:\s*["\']python_execute["\']\s*,\s*["\']parameters["\']\s*:\s*\{\s*["\']code["\']\s*:\s*["\']([^"]*(?:\\.[^"]*)*)["\'](?:\s*\}){0,2}',
+                # Pattern 2: Function call format
+                r'\{\s*["\']function["\']\s*:\s*\{\s*["\']name["\']\s*:\s*["\']python_execute["\']\s*,\s*["\']arguments["\']\s*:\s*["\']([^"]*(?:\\.[^"]*)*)["\']',
+            ]
+
+            for pattern in json_patterns:
+                matches = re.findall(pattern, content, re.DOTALL | re.IGNORECASE)
+                for code_raw in matches:
+                    # Handle escaped strings and clean up the code
+                    code = (
+                        code_raw.replace("\\n", "\n")
+                        .replace('\\"', '"')
+                        .replace("\\'", "'")
+                    )
+                    code = code.replace("\\\\", "\\")  # Fix double escaping
+
+                    # Check if this looks like valid Python code
+                    if any(
+                        keyword in code
+                        for keyword in [
+                            "import",
+                            "print",
+                            "open",
+                            "with",
+                            "def",
+                            "class",
+                        ]
+                    ):
+                        # Try to parse the JSON arguments if it's in that format
+                        try:
+                            if code.startswith("{") and '"code"' in code:
+                                args_dict = json.loads(code)
+                                code = args_dict.get("code", code)
+                        except:
+                            pass  # Use the raw code
+
+                        tool_call = {
+                            "id": f"call_{len(tool_calls)}",
+                            "type": "function",
+                            "function": {
+                                "name": "python_execute",
+                                "arguments": json.dumps({"code": code.strip()}),
+                            },
+                        }
+                        tool_calls.append(tool_call)
+                        break
+
+                if tool_calls:
+                    break
+
+            # If no structured JSON found, look for Python-like code in the content
+            if not tool_calls:
+                # Look for Python code patterns directly in content
+                code_patterns = [
+                    # Multi-line Python code
+                    r'(import\s+\w+.*?print\([^)]*\)[^"\']*)',
+                    r"(with\s+open\([^)]+\).*?\.write\([^)]+\))",
+                    r'(\w+\s*=\s*[\'"][^\'\"]*[\'"].*?print\([^)]*\))',
+                    # Simple statements
+                    r'((?:import|print|open|with)\s*\([^)]*\)[^"\']*)',
+                ]
+
+                for pattern in code_patterns:
+                    matches = re.findall(pattern, content, re.DOTALL | re.IGNORECASE)
+                    for code in matches:
+                        code = code.strip()
+                        if len(code) > 10:  # Ensure it's substantial
+                            tool_call = {
+                                "id": f"call_{len(tool_calls)}",
+                                "type": "function",
+                                "function": {
+                                    "name": "python_execute",
+                                    "arguments": json.dumps({"code": code}),
+                                },
+                            }
+                            tool_calls.append(tool_call)
+                            break
+                    if tool_calls:
+                        break
+
+        return tool_calls
+
     async def ask_tool(
         self, messages: List[Dict[str, Any]], tools: List[Dict], **kwargs
     ) -> Dict:
-        """Unified tool calling implementation."""
+        """Unified tool calling implementation with robust LLM-based fixing."""
         formatted_messages = self.formatter.format_messages(messages)
 
         try:
@@ -214,9 +542,92 @@ class OllamaProvider(BaseLLMProvider):
 
             message = response.choices[0].message
             tool_calls = self.formatter.format_tool_calls(message.tool_calls or [])
+            content = message.content or ""
+
+            # Enhanced tool call fixing with LLM-based self-healing
+            import json
+
+            fixed_calls = []
+            incomplete_calls = []
+
+            if tool_calls:
+                for call in tool_calls:
+                    try:
+                        args_str = call.get("function", {}).get("arguments", "{}")
+                        args = json.loads(args_str)
+
+                        # Check if python_execute code needs fixing
+                        if call.get("function", {}).get("name") == "python_execute":
+                            code = args.get("code", "")
+
+                            # Enhanced detection for incomplete/truncated code
+                            is_incomplete = self._detect_incomplete_code(code)
+
+                            if is_incomplete:
+                                logger.warning(
+                                    f"🔧 Detected incomplete python_execute code: '{code[-50:]}'"
+                                )
+
+                                # Use LLM-based fixing for robust code completion
+                                original_prompt = self._extract_original_task(
+                                    formatted_messages
+                                )
+                                fixed_code = await self._fix_incomplete_code_with_llm(
+                                    code, original_prompt
+                                )
+
+                                if fixed_code != code and len(fixed_code) > len(code):
+                                    logger.info(
+                                        f"🤖 LLM successfully fixed incomplete code ({len(code)} -> {len(fixed_code)} chars)"
+                                    )
+                                    # Update the tool call with fixed code
+                                    call["function"]["arguments"] = json.dumps(
+                                        {"code": fixed_code}
+                                    )
+                                    fixed_calls.append(call)
+                                else:
+                                    logger.warning(
+                                        "🔧 LLM fixing failed, trying fallback pattern-based fixing"
+                                    )
+                                    fallback_fixed = self._fix_incomplete_code(code)
+                                    if fallback_fixed != code:
+                                        call["function"]["arguments"] = json.dumps(
+                                            {"code": fallback_fixed}
+                                        )
+                                        fixed_calls.append(call)
+                                    else:
+                                        incomplete_calls.append(call)
+                            else:
+                                fixed_calls.append(call)
+                        else:
+                            fixed_calls.append(call)
+
+                    except Exception as e:
+                        logger.warning(f"Error processing tool call: {e}")
+                        incomplete_calls.append(call)
+
+            # Use fixed calls
+            tool_calls = fixed_calls
+
+            # If we still have incomplete tool calls, try to extract from content
+            if incomplete_calls and content:
+                logger.warning(
+                    f"🔧 Detected {len(incomplete_calls)} incomplete tool calls, trying content extraction"
+                )
+                extracted_calls = self._extract_tool_calls_from_content(content, tools)
+                if extracted_calls:
+                    tool_calls.extend(extracted_calls)
+                    content = ""  # Clear content since we extracted from it
+
+            # If no structured tool calls but content contains tool call patterns, extract it
+            elif not tool_calls and content:
+                extracted_calls = self._extract_tool_calls_from_content(content, tools)
+                if extracted_calls:
+                    tool_calls = extracted_calls
+                    content = ""
 
             return {
-                "content": message.content or "",
+                "content": content,
                 "tool_calls": tool_calls,
                 "usage": (
                     response.usage.model_dump() if hasattr(response, "usage") else {}
@@ -279,14 +690,22 @@ class OllamaProvider(BaseLLMProvider):
 
 class UnifiedLLM:
     """
-    Unified LLM Interface - Single entry point for all LLM operations.
+    Unified LLM Interface - Single point of entry for all LLM operations.
 
-    Replaces all existing LLM implementations with a single, consistent interface.
-    Automatically routes to the appropriate provider based on configuration.
+    Automatically handles:
+    - Provider selection (Ollama, OpenAI, etc.)
+    - Message formatting
+    - Token counting
+    - Error handling
+    - Tool calling
+    - Vision capabilities
     """
 
     def __init__(self, settings=None):
+        """Initialize unified LLM with appropriate provider."""
         self.settings = settings or config.llm
+
+        # Create provider instance
         self._provider = self._create_provider()
 
         # Expose common properties

@@ -1,8 +1,8 @@
-# ParManus AI Configuration - Ollama llama3.2-vision Only
+# ParManus AI Configuration - Ollama with Proper Model Selection
 [llm]
-# Use llama3.2-vision for everything
+# Use llama3.2 for main tasks (supports tools)
 api_type = "ollama"
-model = "llama3.2-vision"
+model = "llama3.2"
 base_url = "http://localhost:11434/v1"
 api_key = "ollama"
 max_tokens = 2048
@@ -13,7 +13,7 @@ model_path = "models/Llama-3.2-11B-Vision-Instruct.Q4_K_M.gguf"
 n_gpu_layers = -1
 gpu_memory_limit = 7000
 
-# Vision model configuration
+# Vision model configuration (for vision tasks only)
 [llm.vision]
 enabled = true
 api_type = "ollama"

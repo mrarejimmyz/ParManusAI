@@ -8,27 +8,78 @@ data/
 # Workspace
 workspace/
 
-# Backup and temporary files
-*.backup
-*.backup_*
+# Test files - All test scripts during development (exclude tests/ directory)
+test_*.py
+debug_*.py
+apply_*.py
+fix_*.py
+verify_*.py
+validate_*.py
+final_*.py
+
+# Keep legitimate run files but exclude development ones
+run_code_only.py
+
+# Development documentation - Temporary status reports and summaries
+*_COMPLETE*.md
+*_SUMMARY.md
+*_ANALYSIS.md
+*_PLAN.md
+*_STATUS*.md
+*_FIXES*.md
+*_UPDATE*.md
+*_PROGRESS*.md
+MISSION_*.md
+REFACTORING_*.md
+MODULARIZATION_*.md
+COMPREHENSIVE_*.md
+CLEANUP_*.md
+PROJECT_*.md
+SMART_MONITOR_*.md
+SYSTEM_*.md
+TOOL_*.md
+WORKFLOW_*.md
+ROBUSTNESS_*.md
+LLM_*.md
+FINAL_*.md
+AGENT_*.md
+DUPLICATE_*.md
+MANUS_*.md
+HYBRID_*.md
+
+# Backup and refactored files
+*_refactored.py
+*_new.py
 *_backup.py
+*_backup_*
 *_broken.py
 *_fixed.py
 *_optimized.py
 *_legacy.py
 *_original.py
 *_simple.py
-test_*.log
-test_*.py
 *_old.py
 *.old
-debug_tools.py
-verify_*.py
-validate_*.sh
-*_summary.md
-optimization_docs/
+*.backup
+*_backup
+*_core.py.backup
+
+# Temporary and generated files
 *.whl
 *.old
+trump_*_report.md
+simple_report.md
+*.tmp
+
+# Additional development files that shouldn't be committed
+app/ollama_llm.py
+app/agent/actions/*_refactored.py
+app/agent/*_refactored.py
+app/agent/*_new.py
+app/llm/*_new.py
+app/search/*_refactored.py
+
+# Backup and temporary files
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

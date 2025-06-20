@@ -11,7 +11,7 @@ from app.intelligent_error_handler import AdaptiveRecoverySystem
 from app.llm import LLM
 from app.logger import logger
 from app.sandbox.client import SANDBOX_CLIENT
-from app.schema import ROLE_TYPE, AgentState, Memory, Message
+from app.schema import ROLE_TYPE, AgentState, Memory, Message, Role
 
 from .reliability import CircuitBreaker, StuckStateDetector
 
@@ -99,9 +99,9 @@ class BaseAgent(BaseModel, ABC):
     ):
         """Add a message to the agent's memory with validation."""
         message_map = {
-            ROLE_TYPE.USER: "user",
-            ROLE_TYPE.ASSISTANT: "assistant",
-            ROLE_TYPE.SYSTEM: "system",
+            Role.USER: "user",
+            Role.ASSISTANT: "assistant",
+            Role.SYSTEM: "system",
         }
 
         # Use passed role directly if it's a string, otherwise map it

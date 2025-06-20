@@ -119,28 +119,31 @@ async def check_and_process_todo(
         with open(todo_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Extract goal from todo.md
+        # Extract goal from todo.md - try different formats
         goal_match = re.search(r"\*\*Goal:\*\*\s*(.+)", content)
-        if not goal_match:
+        if goal_match:
+            goal = goal_match.group(1).strip()
+        else:
+            # Try simpler format - look for content after "# Task Todo List"
+            lines = content.strip().split("\n")
+            goal = None
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith("#") and not line.startswith("**"):
+                    goal = line
+                    break
+
+        if not goal or len(goal) < 3:
             return False
 
-        goal = goal_match.group(1).strip()
-        if not goal or len(goal) < 10:
-            return False
+        logger.info(f"📋 Found todo.md with goal: {goal}")
+        logger.info("🤖 Auto-starting agent to work on todo.md...")
 
-        # Check if there are empty steps sections (indicating agent should fill them)
-        steps_sections = re.findall(r"\*\*Steps:\*\*\s*$", content, re.MULTILINE)
-        if len(steps_sections) > 0:
-            logger.info(f"📋 Found todo.md with goal: {goal}")
-            logger.info("🤖 Auto-starting agent to work on todo.md...")
+        # Create prompt to work on the todo
+        auto_prompt = f"Work on the todo.md file. The goal is: {goal}. Please read the todo.md, create a detailed action plan with specific steps, and execute the tasks autonomously."
 
-            # Create prompt to work on the todo
-            auto_prompt = f"Work on the todo.md file. The goal is: {goal}. Please read the todo.md, create a detailed action plan with specific steps, and execute the tasks autonomously."
-
-            await process_prompt(
-                auto_prompt, args, llm, config, memory, parmanus_available
-            )
-            return True
+        await process_prompt(auto_prompt, args, llm, config, memory, parmanus_available)
+        return True
 
     except Exception as e:
         logger.error(f"Error reading todo.md: {e}")

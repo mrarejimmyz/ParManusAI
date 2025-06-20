@@ -21,30 +21,48 @@ class VisionSettings(BaseModel):
     api_type: str = Field(default="ollama", description="API type for vision model")
     enabled: bool = Field(default=False, description="Enable vision capabilities")
     model: str = Field(default="llama3.2-vision", description="Vision model name")
-    base_url: str = Field(default="http://localhost:11434/v1", description="API endpoint URL for vision")
+    base_url: str = Field(
+        default="http://localhost:11434/v1", description="API endpoint URL for vision"
+    )
     api_key: str = Field(default="ollama", description="API key for vision model")
     max_tokens: int = Field(default=2048, description="Maximum tokens for vision model")
     temperature: float = Field(default=0.0, description="Temperature for vision model")
     # Legacy fields for backward compatibility
-    model_path: Optional[str] = Field(default=None, description="Path to vision model (legacy)")
-    clip_model_path: Optional[str] = Field(default=None, description="Path to CLIP model (legacy)")
-    n_gpu_layers: int = Field(default=-1, description="Number of GPU layers for vision model")
+    model_path: Optional[str] = Field(
+        default=None, description="Path to vision model (legacy)"
+    )
+    clip_model_path: Optional[str] = Field(
+        default=None, description="Path to CLIP model (legacy)"
+    )
+    n_gpu_layers: int = Field(
+        default=-1, description="Number of GPU layers for vision model"
+    )
 
 
 class LLMSettings(BaseModel):
     """LLM configuration."""
 
-    api_type: str = Field(default="ollama", description="API type (ollama, openai, anthropic, etc.)")
+    api_type: str = Field(
+        default="ollama", description="API type (ollama, openai, anthropic, etc.)"
+    )
     model: str = Field(default="llama3.2", description="Main model name")
-    base_url: str = Field(default="http://localhost:11434/v1", description="API endpoint URL")
+    base_url: str = Field(
+        default="http://localhost:11434/v1", description="API endpoint URL"
+    )
     api_key: str = Field(default="ollama", description="API key")
-    max_tokens: int = Field(default=2048, description="Maximum tokens for generation")
+    max_tokens: int = Field(default=4096, description="Maximum tokens for generation")
     temperature: float = Field(default=0.0, description="Temperature for generation")
-    n_gpu_layers: int = Field(default=-1, description="Number of GPU layers for main model")
+    n_gpu_layers: int = Field(
+        default=-1, description="Number of GPU layers for main model"
+    )
     gpu_memory_limit: int = Field(default=7000, description="GPU memory limit in MB")
     # Legacy fields for backward compatibility
-    model_path: Optional[str] = Field(default=None, description="Path to main model (legacy)")
-    vision: Optional["VisionSettings"] = Field(default=None, description="Vision model settings")
+    model_path: Optional[str] = Field(
+        default=None, description="Path to main model (legacy)"
+    )
+    vision: Optional["VisionSettings"] = Field(
+        default=None, description="Vision model settings"
+    )
 
 
 class ProxySettings(BaseModel):
@@ -164,7 +182,9 @@ class Config(BaseModel):
     memory: Optional[MemorySettings] = Field(default_factory=MemorySettings)
     voice: Optional[VoiceSettings] = Field(default_factory=VoiceSettings)
     max_steps: int = Field(default=25, description="Maximum steps for agent execution")
-    max_observe: int = Field(default=10000, description="Maximum observation length for agent")
+    max_observe: int = Field(
+        default=10000, description="Maximum observation length for agent"
+    )
 
     @property
     def browser_config(self) -> Optional[BrowserSettings]:
@@ -258,7 +278,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
             model="llama3.2",
             base_url="http://localhost:11434/v1",
             api_key="ollama",
-            max_tokens=2048,
+            max_tokens=4096,
             temperature=0.0,
             n_gpu_layers=-1,
             gpu_memory_limit=7000,
@@ -296,5 +316,3 @@ def get_config(config_path: Optional[str] = None) -> Config:
 
 # Global config instance
 config = get_config()
-
-
