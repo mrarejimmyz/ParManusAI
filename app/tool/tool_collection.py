@@ -34,11 +34,30 @@ class ToolCollection:
         if tool_input is None:
             tool_input = {}
 
+        # Validate required parameters before execution
+        if hasattr(tool, "config") and tool.config and tool.config.parameters:
+            required_params = tool.config.parameters.get("required", [])
+            missing_params = [
+                param for param in required_params if param not in tool_input
+            ]
+
+            if missing_params:
+                error_msg = f"Tool {name} missing required parameters: {missing_params}"
+                logger.error(f"🚨 {error_msg}")
+                return ToolFailure(error=error_msg)
+
         try:
             result = await tool.execute(**tool_input)
             return result
         except ToolError as e:
             return ToolFailure(error=e.message)
+        except TypeError as e:
+            if "missing" in str(e) and "required positional argument" in str(e):
+                error_msg = f"Tool {name} execution failed - missing required arguments: {str(e)}"
+                logger.error(f"🚨 {error_msg}")
+                return ToolFailure(error=error_msg)
+            else:
+                raise
 
     async def execute_all(self) -> List[ToolResult]:
         """Execute all tools in the collection sequentially."""

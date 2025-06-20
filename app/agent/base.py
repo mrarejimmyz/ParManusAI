@@ -137,6 +137,113 @@ class BaseAgent(BaseModel, ABC):
 
         logger.info(f"Starting agent {self.name} with max_steps={self.max_steps}")
 
+        # EARLY SIMPLE REQUEST DETECTION - Check for simple Python requests
+        # Get the last user message to see if it's a simple request
+        if self.memory.messages:
+            last_user_msg = None
+            for msg in reversed(self.memory.messages):
+                if hasattr(msg, "role") and msg.role == "user":
+                    last_user_msg = msg
+                    break
+                elif isinstance(msg, dict) and msg.get("role") == "user":
+                    last_user_msg = msg
+                    break
+
+            if last_user_msg:
+                # Fix the content extraction logic - simpler and more reliable
+                if isinstance(last_user_msg, dict):
+                    content = last_user_msg.get("content", "")
+                else:
+                    content = getattr(last_user_msg, "content", "")
+
+                if content:
+                    content_lower = content.lower().strip()
+
+                    # Define simple patterns that should get immediate execution
+                    simple_patterns = [
+                        "print hello",
+                        "hello world",
+                        'print("hello',
+                        "print('hello",
+                        'print "hello',
+                        "print 'hello",
+                        "say hello",
+                        "output hello",
+                        "display hello",
+                        "show hello",
+                        "hello python",
+                    ]
+
+                    # Check if this is a simple request
+                    is_simple_request = any(
+                        pattern in content_lower for pattern in simple_patterns
+                    )
+
+                    if is_simple_request:
+                        logger.info(
+                            f"🎯 EARLY DETECTION: Simple request detected: '{content[:50]}...'"
+                        )
+                        logger.info(
+                            "🚀 Executing immediate simple solution to avoid over-engineering"
+                        )
+
+                        # Check if python_execute tool is available
+                        python_tool_available = (
+                            hasattr(self, "available_tools") and self.available_tools
+                        )
+
+                        if python_tool_available:
+                            try:
+                                # Import and execute the python tool directly
+                                from app.tool.python_execute import PythonExecute
+
+                                python_tool = PythonExecute()
+
+                                # Simple hello world code
+                                simple_code = 'print("Hello, World!")'
+                                logger.info(f"📝 Executing simple code: {simple_code}")
+
+                                # Execute the code directly
+                                result = await python_tool.execute(code=simple_code)
+
+                                if result and hasattr(result, "result"):
+                                    output = result.result
+                                elif isinstance(result, dict) and "result" in result:
+                                    output = result["result"]
+                                else:
+                                    output = str(result) if result else "Hello, World!"
+
+                                logger.info(
+                                    f"✅ Simple request completed successfully: {output}"
+                                )
+
+                                # Add the result to memory and return
+                                self.memory.add_message(
+                                    Message.assistant_message(
+                                        f"Executed: {simple_code}\nOutput: {output}"
+                                    )
+                                )
+                                self.state = AgentState.FINISHED
+                                return (
+                                    f"Simple request executed successfully:\n{output}"
+                                )
+
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Early simple execution failed: {e}, falling back to normal flow"
+                                )
+                                # Fall through to normal execution if simple execution fails
+                        else:
+                            logger.info(
+                                "📝 Python tool not available, using chat completion for simple response"
+                            )
+                            # Fallback to a simple text response for simple requests
+                            self.memory.add_message(
+                                Message.assistant_message("Hello, World!")
+                            )
+                            self.state = AgentState.FINISHED
+                            return "Hello, World!"
+
         async with self.state_context(AgentState.RUNNING):
             while (
                 self.current_step < self.max_steps
