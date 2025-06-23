@@ -103,11 +103,17 @@ class Message(BaseModel):
         cls, content: str, base64_image: Optional[str] = None
     ) -> "Message":
         """Create a user message"""
+        # Ensure content is a string
+        if not isinstance(content, str):
+            content = str(content)
         return cls(role=Role.USER, content=content, base64_image=base64_image)
 
     @classmethod
     def system_message(cls, content: str) -> "Message":
         """Create a system message"""
+        # Ensure content is a string
+        if not isinstance(content, str):
+            content = str(content)
         return cls(role=Role.SYSTEM, content=content)
 
     @classmethod
@@ -115,6 +121,9 @@ class Message(BaseModel):
         cls, content: Optional[str] = None, base64_image: Optional[str] = None
     ) -> "Message":
         """Create an assistant message"""
+        # Ensure content is a string if provided
+        if content is not None and not isinstance(content, str):
+            content = str(content)
         return cls(role=Role.ASSISTANT, content=content, base64_image=base64_image)
 
     @classmethod
@@ -122,6 +131,9 @@ class Message(BaseModel):
         cls, content: str, name, tool_call_id: str, base64_image: Optional[str] = None
     ) -> "Message":
         """Create a tool message"""
+        # Ensure content is a string
+        if not isinstance(content, str):
+            content = str(content)
         return cls(
             role=Role.TOOL,
             content=content,

@@ -70,7 +70,29 @@ class NoDriverScraper:
             await asyncio.sleep(random.uniform(1.0, 3.0))
 
             # Wait for content to load with timeout
-            await page.wait_for_element("body", timeout=10)
+            try:
+                # NoDriver doesn't have wait_for_element, use sleep instead
+                await asyncio.sleep(2.0)  # Give page time to load
+                # Try to wait for page ready state
+                await page.evaluate(
+                    """
+                    () => {
+                        return new Promise((resolve) => {
+                            if (document.readyState === 'complete') {
+                                resolve();
+                            } else {
+                                window.addEventListener('load', resolve);
+                                // Fallback timeout
+                                setTimeout(resolve, 5000);
+                            }
+                        });
+                    }
+                    """
+                )
+            except Exception as e:
+                logger.debug(f"Page load wait failed: {e}")
+                # Continue anyway after a short delay
+                await asyncio.sleep(1.0)
 
             # Execute JavaScript to get comprehensive content
             content = await page.evaluate(

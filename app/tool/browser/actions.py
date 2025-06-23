@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from browser_use.browser.context import BrowserContext
 
 from app.logger import logger
-from app.tool.base import ToolResult
+from app.tool.core.base import ToolResult
 
 
 class BrowserActionHandler:
@@ -202,7 +202,7 @@ class TabHandler(BrowserActionHandler):
                     success=True, content=f"Successfully switched to tab {tab_id}"
                 )
 
-            elif action == "open_tab":
+            elif action == "open_tab" or action == "open":
                 url_to_open = url or "about:blank"
                 logger.info(f"➕ Opening new tab: {url_to_open}")
                 await self.context.create_tab(url_to_open)

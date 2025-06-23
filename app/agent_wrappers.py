@@ -111,9 +111,17 @@ class ParManusAgentWrapper:
             # Cleanup
             if self.agent and hasattr(self.agent, "cleanup"):
                 try:
-                    await self.agent.cleanup()
+                    import asyncio
+
+                    if asyncio.iscoroutinefunction(self.agent.cleanup):
+                        await self.agent.cleanup()
+                    else:
+                        self.agent.cleanup()
                 except Exception as e:
                     logger.warning(f"Error during agent cleanup: {e}")
+                    import traceback
+
+                    logger.debug(f"Cleanup traceback: {traceback.format_exc()}")
 
     # Removed _create_parmanus_config method
 

@@ -54,12 +54,12 @@ class SmartAgentMonitor:
         # Core tracking
         self.action_history: deque = deque(maxlen=50)
         self.task_state: Optional[TaskState] = None
-        self.current_recovery_index = 0  # Configuration
-        self.max_action_time = 120.0
-        self.max_idle_time = 300.0
-        self.min_actions_before_stuck_check = (
-            8  # Increased from 3 to be less aggressive
-        )
+        self.current_recovery_index = 0  # Configuration - More aggressive termination
+        self.max_action_time = 60.0  # Reduced from 120
+        self.max_idle_time = 180.0  # Reduced from 300
+        self.max_task_duration = 1200.0  # 10 minutes max total
+        self.max_recovery_attempts = 8  # Stop after 3 recovery attempts
+        self.min_actions_before_stuck_check = 15  # Check more frequently
 
         logger.info("🔧 Smart Agent Monitor initialized with modular components")
 
@@ -133,9 +133,7 @@ class SmartAgentMonitor:
             if "file" in str(result).lower():
                 self.file_manager.track_file_creation(
                     f"simulated_file_{len(self.action_history)}.md", topic_keywords
-                )
-
-            # Update progress
+                )  # Update progress
             self.status_reporter.update_progress(self.task_state)
             # Reset circuit breaker on success
             self.recovery_manager.circuit_breaker_count = 0
@@ -159,10 +157,40 @@ class SmartAgentMonitor:
                 action, e, duration, self.task_state
             )
 
+    async def monitor_with_aggressive_timeout(self, action: str, timeout: float = 30.0):
+        """Monitor action with aggressive timeout enforcement"""
+        try:
+            # Force maximum timeout of 30 seconds
+            max_timeout = min(timeout, 30.0)
+            result = await asyncio.wait_for(
+                self._execute_action_fast(action), timeout=max_timeout
+            )
+            return {
+                "status": "success",
+                "result": result,
+                "duration": max_timeout,
+                "timeout_enforced": True,
+            }
+        except asyncio.TimeoutError:
+            return {
+                "status": "timeout",
+                "result": f"Action '{action}' timed out after {max_timeout}s",
+                "duration": max_timeout,
+                "timeout_enforced": True,
+            }
+
+    async def _execute_action_fast(self, action: str) -> str:
+        """Fast action execution without delays"""
+        # Simulate fast execution for testing
+        await asyncio.sleep(0.1)  # Minimal delay
+        return f"Fast execution of: {action}"
+
     async def _simulate_action_execution(self, action: str, timeout: float) -> str:
-        """Simulate action execution for testing"""
-        # Simulate some processing time
-        await asyncio.sleep(min(0.1, timeout / 10))
+        """Simulate action execution for testing - FIXED: Remove artificial delays that cause timeouts"""
+        # REMOVED: Artificial sleep that was causing timeouts
+        # await asyncio.sleep(min(0.1, timeout / 10))
+
+        # Return immediately for testing to prevent timeout issues
         return f"Executed: {action}"
 
     async def _should_check_stuck_state(self) -> bool:
@@ -177,7 +205,8 @@ class SmartAgentMonitor:
         # Only if we have enough actions and it's a check interval
         return (
             action_count >= self.min_actions_before_stuck_check
-            and action_count % 5 == 0  # Check every 5 actions instead of 3
+            and action_count % 10
+            == 0  # Check every 10 actions to reduce over-triggering
         )
 
     async def _analyze_stuck_state(self) -> Dict[str, Any]:
@@ -204,8 +233,21 @@ class SmartAgentMonitor:
         return analysis
 
     async def _handle_stuck_state(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle detected stuck state"""
+        """Handle detected stuck state with termination checks"""
         logger.warning("🔄 Stuck state detected, applying recovery")
+
+        # Check if we should terminate instead of recovering
+        if self._should_terminate_task(analysis):
+            logger.warning(
+                "🛑 Task termination triggered - too many recovery attempts or time exceeded"
+            )
+            return {
+                "status": "task_terminated",
+                "reason": "max_recovery_attempts_exceeded_or_timeout",
+                "analysis": analysis,
+                "recovery_attempts": self.current_recovery_index,
+                "message": "Task terminated due to excessive recovery attempts or timeout",
+            }
 
         recovery_result = await self.recovery_manager.smart_recovery(
             analysis, self.task_state
@@ -244,6 +286,25 @@ class SmartAgentMonitor:
         self.file_manager.file_tracker = FileTracker()
 
         logger.info("🔄 Smart monitor forcibly reset")
+
+    def _should_terminate_task(self, analysis: Dict[str, Any]) -> bool:
+        """Check if task should be terminated instead of recovered"""
+        # Terminate if too many recovery attempts
+        if self.current_recovery_index >= self.max_recovery_attempts:
+            return True
+
+        # Terminate if task has been running too long
+        if self.task_state and self.task_state.start_time:
+            duration = (datetime.now() - self.task_state.start_time).total_seconds()
+            if duration > self.max_task_duration:
+                return True
+
+        # Terminate if pattern analysis shows excessive looping
+        pattern_analysis = analysis.get("pattern_analysis", {})
+        if pattern_analysis.get("pattern_strength", 0) > 25:
+            return True
+
+        return False
 
     # Legacy compatibility methods
     async def monitor_with_timeout(

@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional
 from browser_use.browser.context import BrowserContext
 
 from app.logger import logger
-from app.tool.base import ToolResult
 from app.tool.browser.actions import (
     ExtractionHandler,
     InteractionHandler,
@@ -17,6 +16,7 @@ from app.tool.browser.actions import (
     ScrollHandler,
     TabHandler,
 )
+from app.tool.core.base import ToolResult
 
 
 class BrowserActionRouter:
@@ -33,9 +33,7 @@ class BrowserActionRouter:
         self.tab_handler = TabHandler(context, selector_tracker)
         self.extraction_handler = ExtractionHandler(
             context, content_extractor, selector_tracker
-        )
-
-        # Action routing map
+        )  # Action routing map
         self.action_map = {
             # Navigation actions
             "go_to": self.navigation_handler,
@@ -52,6 +50,7 @@ class BrowserActionRouter:
             # Tab management
             "switch_tab": self.tab_handler,
             "open_tab": self.tab_handler,
+            "open": self.tab_handler,  # Alias for open_tab to handle common mistakes
             "close_tab": self.tab_handler,
             # Content extraction
             "extract_content": self.extraction_handler,
@@ -149,6 +148,7 @@ class BrowserActionRouter:
             "scroll_to_text": "Scroll to specific text. Requires: text",
             "switch_tab": "Switch to a tab. Requires: tab_id",
             "open_tab": "Open a new tab. Optional: url (default about:blank)",
+            "open": "Open a new tab (alias for open_tab). Optional: url (default about:blank)",
             "close_tab": "Close current tab. No parameters required.",
             "extract_content": "Extract content from page. Optional: goal",
         }

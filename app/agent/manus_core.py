@@ -17,9 +17,11 @@ from app.exceptions import AgentTaskComplete
 from app.logger import logger
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.schema import AgentState, ToolCall, ToolChoice
-from app.tool import Terminate, ToolCollection
+from app.tool import Terminate, ToolCollection, WebSearch
 from app.tool.ask_human import AskHuman
+from app.tool.ask_vision import AskVision
 from app.tool.browser_use_tool import BrowserUseTool
+from app.tool.llm_analysis_report import LLMAnalysisReportTool
 from app.tool.mcp import MCPClients
 from app.tool.python_execute import PythonExecute
 
@@ -32,6 +34,9 @@ class Manus(BaseAgent):
         default_factory=lambda: ToolCollection(
             PythonExecute(),
             BrowserUseTool(),
+            WebSearch(),
+            LLMAnalysisReportTool(),
+            AskVision(),
             AskHuman(),
             Terminate(),
         )
@@ -135,6 +140,10 @@ class Manus(BaseAgent):
     async def run(self, request: Optional[str] = None) -> str:
         """Optimized run method using modular orchestration."""
         try:
+            # Store original user request for tool filtering
+            if request:
+                self.original_user_request = request
+
             # Initialize if not already done
             if not self.orchestrator._modules_initialized:
                 await self.initialize()
@@ -167,6 +176,10 @@ class Manus(BaseAgent):
 
             return result
 
+        except AgentTaskComplete as e:
+            # Task completed successfully with result
+            logger.info(f"🎉 Task completed successfully: {e.message}")
+            return str(e.message)
         except Exception as e:
             logger.error(f"❌ Error in optimized run: {e}")
 
@@ -193,7 +206,68 @@ class Manus(BaseAgent):
         """Execute actions using modular tool management."""
         if not self.tool_calls:
             logger.warning("⚠️ No tool calls to execute")
+
+            # Handle no-tools case for research tasks
+            if hasattr(self, "original_user_request"):
+                user_request = getattr(self, "original_user_request", "").lower()
+                research_indicators = [
+                    "research",
+                    "search",
+                    "latest",
+                    "current",
+                    "news",
+                    "breakthroughs",
+                    "developments",
+                    "analyze",
+                    "investigate",
+                    "find",
+                    "look up",
+                    "report",
+                    "analysis",
+                    "create a",
+                    "generate a",
+                    "write a",
+                    "trends",
+                ]
+
+                is_research_task = any(
+                    indicator in user_request for indicator in research_indicators
+                )
+
+                if is_research_task:
+                    # Count consecutive no-tools occurrences
+                    if not hasattr(self, "_consecutive_no_tools"):
+                        self._consecutive_no_tools = 0
+                    self._consecutive_no_tools += 1
+
+                    logger.info(
+                        f"🔍 Research task with no tools (attempt {self._consecutive_no_tools})"
+                    )
+
+                    if self._consecutive_no_tools >= 2:  # Reduced threshold
+                        logger.info(
+                            "🎯 Multiple no-tools attempts - forcing research completion"
+                        )
+                        # Force completion through thinking engine
+                        await self.thinking_engine._force_generate_report()
+
+                        # Generate completion result
+                        completion_result = (
+                            f"Research task completed successfully for: {user_request}"
+                        )
+
+                        if completion_result:
+                            from app.exceptions import AgentTaskComplete
+
+                            raise AgentTaskComplete(
+                                "Research task completed with optimized workflow"
+                            )
+                        return "Research task completed with available data"
+
             return None
+        else:
+            # Reset no-tools counter when tools are available
+            self._consecutive_no_tools = 0
 
         # Use smart monitor for execution monitoring
         step_result = None

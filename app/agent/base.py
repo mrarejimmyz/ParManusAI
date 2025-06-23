@@ -12,6 +12,7 @@ from app.llm import LLM
 from app.logger import logger
 from app.sandbox.client import SANDBOX_CLIENT
 from app.schema import ROLE_TYPE, AgentState, Memory, Message, Role
+from app.utils.string_safety import safe_lower
 
 from .reliability import CircuitBreaker, StuckStateDetector
 
@@ -57,6 +58,11 @@ class BaseAgent(BaseModel, ABC):
         default_factory=AdaptiveRecoverySystem
     )
     performance_metrics: Dict[str, Any] = Field(default_factory=dict)
+
+    # Critical error tracking to prevent infinite loops
+    critical_error_count: int = Field(default=0)
+    last_critical_error: Optional[str] = Field(default=None)
+    max_critical_errors: int = Field(default=3)
 
     class Config:
         arbitrary_types_allowed = True
@@ -157,7 +163,8 @@ class BaseAgent(BaseModel, ABC):
                     content = getattr(last_user_msg, "content", "")
 
                 if content:
-                    content_lower = content.lower().strip()
+                    # Use safe_lower to prevent dict.lower() errors
+                    content_lower = safe_lower(content).strip()
 
                     # Define simple patterns that should get immediate execution
                     simple_patterns = [
@@ -301,6 +308,32 @@ class BaseAgent(BaseModel, ABC):
                         f"Agent {self.name} step {self.current_step} failed: {e}"
                     )
 
+                    # Check for critical errors that could cause infinite loops
+                    error_str = str(e)
+                    is_critical_error = (
+                        "dict" in error_str
+                        and "lower" in error_str
+                        and "attribute" in error_str
+                    ) or ("AttributeError" in error_str and "lower" in error_str)
+
+                    if is_critical_error:
+                        if self.last_critical_error == error_str:
+                            self.critical_error_count += 1
+                        else:
+                            self.critical_error_count = 1
+                            self.last_critical_error = error_str
+
+                        if self.critical_error_count >= self.max_critical_errors:
+                            logger.error(
+                                f"🚨 CRITICAL: Same error occurred {self.critical_error_count} times. "
+                                f"Terminating to prevent infinite loop: {error_str}"
+                            )
+                            self.state = AgentState.FINISHED
+                            results.append(
+                                f"Terminated due to repeated critical error: {error_str}"
+                            )
+                            break
+
                     # Record failure in circuit breaker and metrics
                     self.circuit_breaker.call_failed()
                     self.performance_metrics["failed_steps"] += 1
@@ -395,9 +428,8 @@ class BaseAgent(BaseModel, ABC):
             )
 
         # Strategy 2: Tool failure recovery
-        elif (
-            "failed" in str(recent_responses).lower()
-            or "error" in str(recent_responses).lower()
+        elif "failed" in safe_lower(str(recent_responses)) or "error" in safe_lower(
+            str(recent_responses)
         ):
             logger.info(
                 "Detected tool failure pattern, applying tool-specific recovery"

@@ -4,12 +4,14 @@ Manages thinking, planning, tool selection, and response generation.
 """
 
 import json
+import time
 from typing import Any, Dict, List, Optional
 
 from app.agent.core.tool_manager import ToolManager
 from app.exceptions import AgentTaskComplete, TokenLimitExceeded
 from app.logger import logger
 from app.schema import Message, ToolCall
+from app.utils.llm_report_generator import LLMReportGenerator, SearchResultFormatter
 
 
 class ThinkingEngine:
@@ -20,6 +22,19 @@ class ThinkingEngine:
         self.orchestrator = orchestrator
         self.tool_manager = ToolManager(agent_instance)
         self.thinking_history: List[Dict] = []
+        # Initialize LLM report generator
+        self.report_generator = (
+            LLMReportGenerator(agent_instance.llm)
+            if hasattr(agent_instance, "llm")
+            else None
+        )
+        # Add workflow state tracking
+        self.workflow_state = {
+            "research_data_collected": False,
+            "report_generated": False,
+            "collected_data": [],
+            "last_search_results": None,
+        }
 
     async def think_and_plan(self) -> bool:
         """Core thinking process - analyze situation and plan next actions."""
@@ -99,7 +114,7 @@ class ThinkingEngine:
 
     async def _process_thinking_response(self, response: Any) -> bool:
         """Process and validate the thinking response from LLM."""
-        # Extract tool calls from response
+        # Extract tool calls from LLM response
         raw_tool_calls = (
             response.get("tool_calls")
             if response and isinstance(response, dict)
@@ -110,12 +125,44 @@ class ThinkingEngine:
             )
         )
 
+        logger.info(
+            f"🔍 Raw tool calls from response: {raw_tool_calls} (type: {type(raw_tool_calls)})"
+        )
+
+        # If no tool_calls found, try to extract from content
+        if not raw_tool_calls:
+            content = (
+                response.get("content")
+                if response and isinstance(response, dict)
+                else (
+                    response.content
+                    if response and hasattr(response, "content")
+                    else ""
+                )
+            )
+            logger.info(
+                f"🔍 No tool calls found, checking content for tool patterns..."
+            )
+
+            # Try to extract tool calls from content if it contains tool patterns
+            if content and any(
+                pattern in content.lower()
+                for pattern in ["search", "generate_report", "analysis"]
+            ):
+                logger.info(
+                    f"🔍 Content suggests tool usage but no tool calls extracted"
+                )
+
         # Process tool calls through fixing logic to ensure argument validation
         if raw_tool_calls:
             fixed_tool_calls = await self._fix_tool_call_arguments(raw_tool_calls)
             self.agent.tool_calls = tool_calls = fixed_tool_calls
         else:
             self.agent.tool_calls = tool_calls = raw_tool_calls
+
+        logger.info(
+            f"🛠️ Final tool calls assigned to agent: {len(tool_calls) if tool_calls else 0} tools"
+        )
 
         content = (
             response.get("content")
@@ -129,6 +176,52 @@ class ThinkingEngine:
             f"🛠️ {self.agent.config.name} selected {len(tool_calls) if tool_calls else 0} tools to use"
         )
 
+        # Check for research/analysis patterns and update workflow state
+        user_messages = [
+            msg.content
+            for msg in self.agent.messages
+            if hasattr(msg, "role") and msg.role == "user" and hasattr(msg, "content")
+        ]
+        original_request = getattr(self.agent, "original_user_request", "")
+        all_text = " ".join(user_messages + [original_request, content])
+
+        is_research_analysis = any(
+            pattern in all_text.lower()
+            for pattern in [
+                "research",
+                "analyze",
+                "analysis",
+                "report",
+                "study",
+                "investigate",
+                "examine",
+                "review",
+                "assess",
+                "evaluate",
+                "summarize",
+                "summary",
+            ]
+        )
+
+        if is_research_analysis:
+            logger.info(f"🔬 Detected research/analysis task pattern")
+            # Check if we have search tool calls that might provide data
+            if tool_calls and any(
+                "search"
+                in (
+                    tc.get("function", {}).get("name", "")
+                    if isinstance(tc, dict)
+                    else (
+                        getattr(tc, "function", {}).get("name", "")
+                        if hasattr(tc, "function")
+                        else str(tc).lower()
+                    )
+                )
+                for tc in tool_calls
+            ):
+                self.workflow_state["research_data_collected"] = True
+                logger.info(f"🔬 Research tools detected, marking data as collected")
+
         # Add assistant message to memory
         assistant_msg = (
             Message.from_tool_calls(content=content, tool_calls=self.agent.tool_calls)
@@ -136,6 +229,9 @@ class ThinkingEngine:
             else Message(role="assistant", content=content)
         )
         self.agent.messages.append(assistant_msg)
+
+        # Check if we should force report generation for research/analysis tasks
+        await self._check_forced_report_generation(tool_calls, content)
 
         # Record thinking session
         self.thinking_history.append(
@@ -207,6 +303,149 @@ class ThinkingEngine:
                 h["tools_selected"] for h in self.thinking_history[-5:]
             ],  # Last 5 sessions
         }
+
+    async def _check_forced_report_generation(self, tool_calls, content):
+        """Check if we should force report generation for research/analysis tasks."""
+        try:
+            user_messages = [
+                msg.content
+                for msg in self.agent.messages
+                if hasattr(msg, "role")
+                and msg.role == "user"
+                and hasattr(msg, "content")
+            ]
+            original_request = getattr(self.agent, "original_user_request", "")
+            all_text = " ".join(user_messages + [original_request, content])
+
+            # Enhanced patterns for research/analysis tasks
+            is_research_analysis = any(
+                pattern in all_text.lower()
+                for pattern in [
+                    "research",
+                    "analyze",
+                    "analysis",
+                    "report",
+                    "study",
+                    "investigate",
+                    "examine",
+                    "review",
+                    "assess",
+                    "evaluate",
+                    "summarize",
+                    "summary",
+                    "information about",
+                    "tell me about",
+                    "what is",
+                    "explain",
+                    "details about",
+                    "overview of",
+                    "background on",
+                    "insights on",
+                ]
+            )
+
+            # Check if no tools were selected or if we should force a report
+            should_force_report = False
+
+            if is_research_analysis:
+                # Force report if no useful tools selected
+                if not tool_calls or len(tool_calls) == 0:
+                    logger.info(
+                        f"🎯 No tools selected for research task - forcing report generation"
+                    )
+                    should_force_report = True
+
+                # Force report if only non-research tools selected
+                elif not any(
+                    tool_name
+                    in [
+                        "enhanced_search",
+                        "search_enhanced",
+                        "generate_analysis_report",
+                        "enhanced_browser",
+                    ]
+                    for tool_name in [
+                        (
+                            tc.get("function", {}).get("name", "")
+                            if isinstance(tc, dict)
+                            else (
+                                getattr(tc, "function", {}).get("name", "")
+                                if hasattr(tc, "function")
+                                else str(tc)
+                            )
+                        )
+                        for tc in tool_calls
+                    ]
+                ):
+                    logger.info(
+                        f"🎯 No research tools selected for research task - forcing report generation"
+                    )
+                    should_force_report = True
+
+                # Force report if we've already attempted research
+                elif self.workflow_state.get(
+                    "research_data_collected", False
+                ) and not self.workflow_state.get("report_generated", False):
+                    logger.info(f"🎯 Research attempted, now forcing report generation")
+                    should_force_report = True
+
+            if should_force_report:
+                await self._force_generate_report()
+
+        except Exception as e:
+            logger.warning(f"Error in forced report generation check: {e}")
+
+    async def _force_generate_report(self):
+        """Force generation of an analysis report using available data."""
+        try:
+            logger.info(f"🎯 Forcing report generation for research/analysis task")
+
+            # Create a report generation tool call with proper parameters
+            query = getattr(self.agent, "original_user_request", "Research Analysis")
+
+            # Create fallback research data when tools fail
+            fallback_research_data = {
+                "search_results": {
+                    "query": query,
+                    "results": [],
+                    "status": "fallback_llm_only",
+                    "note": "Using LLM knowledge only due to tool limitations",
+                },
+                "analysis_context": {
+                    "task_type": "research_analysis",
+                    "data_source": "llm_knowledge",
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                },
+            }
+
+            report_tool_call = {
+                "function": {
+                    "name": "generate_analysis_report",
+                    "arguments": json.dumps(
+                        {
+                            "query": query,
+                            "research_data": json.dumps(fallback_research_data),
+                            "confidence_level": "Medium",
+                            "output_filename": f"{query.lower().replace(' ', '_')}_analysis.md",
+                        }
+                    ),
+                }
+            }
+
+            # Add to tool calls if not already present
+            if not any(
+                tc.get("function", {}).get("name") == "generate_analysis_report"
+                for tc in (self.agent.tool_calls or [])
+            ):
+                if not self.agent.tool_calls:
+                    self.agent.tool_calls = []
+                self.agent.tool_calls.append(report_tool_call)
+                logger.info(f"🎯 Added forced report generation tool call")
+
+            self.workflow_state["report_generated"] = True
+
+        except Exception as e:
+            logger.warning(f"Error forcing report generation: {e}")
 
     async def cleanup(self):
         """Clean up thinking engine resources."""

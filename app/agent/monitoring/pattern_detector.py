@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from app.logger import logger
+from app.utils.string_safety import safe_lower
 
 from .models import ActionHistory, FileTracker, TaskState
 
@@ -27,13 +28,12 @@ class PatternDetector:
             return False
 
         recent_actions = list(action_history)[-6:]  # Last 6 actions
-        action_lower = action.lower()
-
-        # Count similar actions in recent history
+        action_lower = safe_lower(action)  # Count similar actions in recent history
         similar_count = sum(
             1
             for h in recent_actions
-            if action_lower in h.action.lower() or h.action.lower() in action_lower
+            if action_lower in safe_lower(h.action)
+            or safe_lower(h.action) in action_lower
         )
 
         return similar_count >= self.max_repeated_patterns
@@ -44,7 +44,7 @@ class PatternDetector:
             return {"has_loops": False, "pattern_strength": 0}
 
         recent_actions = list(action_history)[-10:]  # Last 10 actions
-        action_types = [h.action.lower() for h in recent_actions]
+        action_types = [safe_lower(h.action) for h in recent_actions]
 
         # Check for immediate loops (A->B->A pattern)
         immediate_loops = 0

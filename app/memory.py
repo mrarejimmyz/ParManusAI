@@ -69,6 +69,13 @@ class Memory:
             content: The message content.
             **kwargs: Additional message parameters.
         """
+        # Ensure content is a string to prevent validation errors
+        if not isinstance(content, str):
+            content = str(content)
+            logger.warning(
+                f"⚠️ Content was not a string, converted: {type(content)} -> str"
+            )
+
         if role == "user":
             message = Message.user_message(content, **kwargs)
         elif role == "assistant":

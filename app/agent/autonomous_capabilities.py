@@ -14,6 +14,7 @@ from app.agent.enhanced_error_recovery import (
     RecoveryStrategy,
 )
 from app.logger import logger
+from app.utils.string_safety import safe_contains_lower, safe_lower
 
 
 class AutonomousCapabilities:
@@ -216,11 +217,11 @@ class AutonomousCapabilities:
         self, problematic_code: str, messages: List = None
     ) -> str:
         """Autonomously fix problematic code with simple, working alternatives - Windows path safe"""
-        try:
-            # Determine what type of task this is based on context
+        try:  # Determine what type of task this is based on context
             request_context = ""
             if messages:
-                request_context = messages[-1].content.lower() if messages else ""
+                last_msg_content = messages[-1].content if messages else ""
+                request_context = safe_lower(last_msg_content)
 
             # Cryptocurrency research task
             if any(
@@ -648,7 +649,7 @@ except Exception as e:    # Fallback to simple filename
         if "ask_human" not in tools:
             return False
 
-        request_lower = user_request.lower()
+        request_lower = safe_lower(user_request)
 
         # Always exclude ask_human for autonomous tasks
         autonomous_task_patterns = [
@@ -666,34 +667,36 @@ except Exception as e:    # Fallback to simple filename
             "trump",
             "presidency",
             "bitcoin",
-            "ethereum",
-            "market",
+            "autonomous",
+            "complete independently",
+            "without asking",
+            "without help",
         ]
 
+        # Check if this is an autonomous task
         for pattern in autonomous_task_patterns:
             if pattern in request_lower:
                 logger.info(f"🤖 Excluding ask_human for autonomous task: {pattern}")
                 return True
 
-        # Only allow ask_human for truly interactive tasks
-        interactive_patterns = [
-            "what do you think",
-            "your opinion",
-            "choose for me",
-            "which should i",
-            "what would you do",
-            "help me decide",
-            "favorite",
-            "which do you prefer",
-        ]
+        return False
 
-        for pattern in interactive_patterns:
-            if pattern in request_lower:
-                logger.info(f"✅ Allowing ask_human for interactive task: {pattern}")
-                return False
+    def should_terminate_on_ask_human_loop(
+        self, thinking_response: str, loop_count: int = 0
+    ) -> bool:
+        """Detect and terminate infinite ask_human loops."""
+        if loop_count > 5:  # If we've seen ask_human attempts more than 5 times
+            logger.warning("🛑 Detected ask_human infinite loop - forcing termination")
+            return True
 
-        # Default: exclude ask_human for most tasks to ensure autonomy
-        return True
+        # Check if the thinking response only contains ask_human
+        if "ask_human" in thinking_response and len(thinking_response.strip()) < 200:
+            logger.warning(
+                "🛑 Agent stuck on ask_human - forcing autonomous completion"
+            )
+            return True
+
+        return False
 
     async def validate_llm_response(
         self, response: str, expected_format: str = "tool_calls"
@@ -715,7 +718,7 @@ except Exception as e:    # Fallback to simple filename
                 return False, "Empty response", validation_result
 
             # Check for common LLM output issues
-            response_lower = response.lower()
+            response_lower = safe_lower(response)
 
             # Check for incomplete responses
             incomplete_indicators = [
@@ -870,7 +873,7 @@ except Exception as e:    # Fallback to simple filename
         """Generate enhanced, robust tool calls that are less likely to fail."""
         try:
             # Determine the type of task and generate appropriate tool calls
-            request_lower = original_request.lower()
+            request_lower = safe_lower(original_request)
 
             # For code execution tasks, generate simple, reliable code
             if any(
@@ -917,11 +920,14 @@ filename = "output.txt"
 with open(filename, 'w') as f:
     f.write(content)
 print(f"File {filename} created successfully!")"""
-        else:
-            # More comprehensive but still simple approach
-            if "crypto" in request.lower() or "investment" in request.lower():
+        else:  # More comprehensive but still simple approach
+            if safe_contains_lower(request, "crypto") or safe_contains_lower(
+                request, "investment"
+            ):
                 code = await self._get_simple_crypto_code()
-            elif "trump" in request.lower() or "report" in request.lower():
+            elif safe_contains_lower(request, "trump") or safe_contains_lower(
+                request, "report"
+            ):
                 code = await self._get_simple_report_code()
             else:
                 code = await self._get_simple_task_code()

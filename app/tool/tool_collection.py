@@ -34,11 +34,26 @@ class ToolCollection:
         if tool_input is None:
             tool_input = {}
 
+        # Comprehensive parameter validation and type safety
+        validated_input = {}
+        for key, value in tool_input.items():
+            # Ensure all parameter keys and values are safe for string operations
+            if isinstance(value, dict):
+                # Convert dict to string if it might be used with .lower()
+                logger.warning(
+                    f"🔧 Converting dict parameter '{key}' to string for safety: {value}"
+                )
+                validated_input[key] = str(value)
+            elif value is None:
+                validated_input[key] = ""
+            else:
+                validated_input[key] = value
+
         # Validate required parameters before execution
         if hasattr(tool, "config") and tool.config and tool.config.parameters:
             required_params = tool.config.parameters.get("required", [])
             missing_params = [
-                param for param in required_params if param not in tool_input
+                param for param in required_params if param not in validated_input
             ]
 
             if missing_params:
@@ -47,7 +62,7 @@ class ToolCollection:
                 return ToolFailure(error=error_msg)
 
         try:
-            result = await tool.execute(**tool_input)
+            result = await tool.execute(**validated_input)
             return result
         except ToolError as e:
             return ToolFailure(error=e.message)

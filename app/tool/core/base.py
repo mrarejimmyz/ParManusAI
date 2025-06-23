@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from app.config import config
 from app.llm import LLM
 from app.logger import logger
+from app.tool.core.hallucination_detector import hallucination_detector
 
 
 class ToolResult(BaseModel):
@@ -137,9 +138,7 @@ class BaseTool(BaseModel, ABC):
         Execute the tool with full framework support.
 
         Args:
-            **kwargs: Tool parameters
-
-        Returns:
+            **kwargs: Tool parameters        Returns:
             ToolResult: Execution result with metadata
         """
         start_time = time.time()
@@ -154,6 +153,23 @@ class BaseTool(BaseModel, ABC):
             # Sanitize input
             if self.config.sanitize_input:
                 kwargs = await self._sanitize_input(kwargs)
+
+            # Hallucination detection
+            hallucination_result = (
+                hallucination_detector.detect_hallucinated_parameters(
+                    self.config.name, kwargs
+                )
+            )
+
+            if hallucination_result["is_hallucination"]:
+                logger.warning(
+                    f"🎭 Hallucination detected in {self.config.name}, using safe alternatives"
+                )
+                kwargs = hallucination_detector.generate_safe_alternative(
+                    self.config.name, kwargs
+                )
+                # Add detection metadata
+                kwargs["_detection_metadata"] = hallucination_result
 
             # Check cache
             if self.config.cache_enabled:
@@ -309,9 +325,48 @@ class BaseTool(BaseModel, ABC):
 
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
-                optimized_params = json.loads(json_match.group())
+                optimized_params = json.loads(
+                    json_match.group()
+                )  # Validate that optimized_params is a dict and has reasonable structure
+                if not isinstance(optimized_params, dict):
+                    logger.warning(
+                        f"⚠️ LLM returned non-dict parameters for {self.config.name}, falling back to original"
+                    )
+                    return kwargs
+
+                # Ensure that string parameters remain strings (prevent dict values for string params)
+                validated_params = {}
+                for key, value in optimized_params.items():
+                    # Critical: Ensure no complex objects that could cause .lower() errors
+                    if isinstance(value, (dict, list)):
+                        logger.warning(
+                            f"⚠️ LLM returned complex type for '{key}': {type(value)}, converting to string"
+                        )
+                        validated_params[key] = str(value)
+                    elif value is None:
+                        validated_params[key] = ""
+                    # If the original parameter was a string, ensure the optimized one is too
+                    if key in kwargs and isinstance(kwargs[key], str):
+                        if (
+                            not isinstance(value, (str, int, float, bool))
+                            or value is None
+                        ):
+                            logger.warning(
+                                f"⚠️ LLM changed string param '{key}' to complex type {type(value)}, using original"
+                            )
+                            validated_params[key] = kwargs[key]
+                        else:
+                            validated_params[key] = str(value)  # Ensure it's a string
+                    else:
+                        validated_params[key] = value
+
+                # Add any missing parameters from original kwargs
+                for key, value in kwargs.items():
+                    if key not in validated_params:
+                        validated_params[key] = value
+
                 logger.info(f"🧠 LLM optimized parameters for {self.config.name}")
-                return optimized_params
+                return validated_params
         except Exception as e:
             logger.warning(f"⚠️ LLM reasoning failed for {self.config.name}: {e}")
 

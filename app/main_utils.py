@@ -77,7 +77,7 @@ async def process_prompt(
 ):
     """Process a single user prompt."""
     if not prompt or not prompt.strip():
-        return
+        return None
 
     memory.push("user", prompt)
 
@@ -95,15 +95,28 @@ async def process_prompt(
         result = await agent.run(prompt)
         end_time = time.time()
 
-        memory.push("assistant", result)
+        # Ensure result is a string before pushing to memory
+        if not isinstance(result, str):
+            result_str = str(result)
+            logger.warning(
+                f"⚠️ Agent returned non-string result, converting: {type(result)} -> str"
+            )
+        else:
+            result_str = result
+
+        memory.push("assistant", result_str)
 
         logger.info(f"✅ Task completed in {end_time - start_time:.2f} seconds.")
         print(f"\n🤖 Agent Response:\n{result}")
+
+        # Return the result to the caller
+        return result_str
 
     except Exception as e:
         logger.error(f"Error processing prompt: {e}")
         logger.error(traceback.format_exc())
         memory.push("error", f"Error processing prompt: {e}")
+        return f"Error processing prompt: {e}"
 
 
 async def check_and_process_todo(

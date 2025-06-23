@@ -10,6 +10,7 @@ from app.logger import logger
 from app.prompt.toolcall import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.schema import TOOL_CHOICE_TYPE, AgentState, Message, ToolCall, ToolChoice
 from app.tool import CreateChatCompletion, PythonExecute, Terminate, ToolCollection
+from app.utils.string_safety import safe_contains_lower, safe_lower
 
 TOOL_CALL_REQUIRED = "Tool calls required but none provided"
 
@@ -377,7 +378,7 @@ class ToolCallAgent(ReActAgent):
 
     def _is_special_tool(self, name: str) -> bool:
         """Check if tool name is in special tools list"""
-        return name.lower() in [n.lower() for n in self.special_tool_names]
+        return safe_lower(name) in [safe_lower(n) for n in self.special_tool_names]
 
     async def cleanup(self):
         """Clean up resources used by the agent's tools."""
@@ -556,7 +557,7 @@ class ToolCallAgent(ReActAgent):
                             ]
                             is_simple_request = any(
                                 any(
-                                    word in content.lower()
+                                    word in safe_lower(content)
                                     for word in [
                                         "print",
                                         "hello",

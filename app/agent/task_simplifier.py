@@ -13,41 +13,83 @@ class TaskSimplifier:
         pass
 
     async def apply_smart_task_simplification(self, user_request: str) -> str:
-        """Autonomously simplify complex requests into direct, actionable tasks"""
+        """Intelligently handle complex multi-step requests without oversimplifying"""
         request_lower = user_request.lower()
 
-        # Cryptocurrency research simplification
-        if any(
-            keyword in request_lower
-            for keyword in [
-                "crypto",
-                "cryptocurrency",
-                "bitcoin",
-                "ethereum",
-                "investment",
-            ]
+        # Detect complex multi-step tasks and preserve them
+        complex_indicators = [
+            "analyze",
+            "update",
+            "mark",
+            "add",
+            "create",
+            "summary",
+            "progress",
+            "steps",
+            "todo",
+            "checklist",
+            "multiple",
+            "then",
+            "and",
+            "also",
+            "additionally",
+            "furthermore",
+        ]
+
+        # Count complexity indicators
+        complexity_score = sum(
+            1 for indicator in complex_indicators if indicator in request_lower
+        )
+
+        # If it's a complex multi-step task (3+ indicators), preserve the original request
+        if complexity_score >= 3:
+            logger.info(
+                f"🧠 Complex multi-step task detected (score: {complexity_score}), preserving full request"
+            )
+            return user_request  # Cryptocurrency research simplification (only for simple requests)
+        if (
+            any(
+                keyword in request_lower
+                for keyword in [
+                    "crypto",
+                    "cryptocurrency",
+                    "bitcoin",
+                    "ethereum",
+                ]
+            )
+            and complexity_score < 3
+            and not any(  # Don't apply if it's about specific stocks/companies
+                company in request_lower
+                for company in [
+                    "tesla",
+                    "tsla",
+                    "apple",
+                    "aapl",
+                    "microsoft",
+                    "msft",
+                    "google",
+                    "googl",
+                    "amazon",
+                    "amzn",
+                    "meta",
+                    "nvda",
+                    "nvidia",
+                ]
+            )
         ):
-            return """Create a comprehensive cryptocurrency investment report for 2025. Include market analysis, top cryptocurrencies (Bitcoin, Ethereum, Solana, Cardano), investment strategies (conservative, balanced, aggressive portfolios), risk assessment, and specific investment recommendations. Save as cryptocurrency_investment_report.md. Use simple Python code to generate a detailed report with current market insights."""
+            return """Create a comprehensive cryptocurrency investment report for 2025. Include market analysis, top cryptocurrencies (Bitcoin, Ethereum, Solana, Cardano), investment strategies (conservative, balanced, aggressive portfolios), risk assessment, and specific investment recommendations. Save as cryptocurrency_investment_report.md. Use available tools to generate a detailed report with current market insights."""
 
-        # Trump report simplification
-        elif "trump" in request_lower and "report" in request_lower:
-            return """Create a comprehensive Trump presidency report using simple, direct Python code. Write the content as a string variable and save it to trump_presidency_report.md file. Focus on: overview, key events, major policies, and conclusion. Keep the code simple and avoid complex functions or imports."""
-
-        # General report simplification
-        elif "report" in request_lower:
-            return f"""Create a report using simple Python code. Write the content as a string variable and save it to a .md file. Original request: {user_request}"""
-
-        # File creation simplification
-        elif any(word in request_lower for word in ["create", "write", "save", "file"]):
-            return f"""Create or write content to a file using simple Python file operations. Use basic 'with open()' syntax. Original request: {user_request}"""
-
-        # Research task simplification
-        elif any(
-            word in request_lower for word in ["research", "analyze", "search", "find"]
+        # Simple file operations only
+        elif (
+            any(
+                word in request_lower
+                for word in ["create file", "write file", "save file"]
+            )
+            and complexity_score < 2
         ):
-            return f"""Perform research and create a comprehensive report. Use simple Python code to generate content and save to a file. Focus on providing detailed, actionable information. Original request: {user_request}"""
+            return f"""Create or write content to a file using available tools. Original request: {user_request}"""
 
-        # Return original if no simplification patterns match
+        # Return original for all other cases to preserve complexity
         return user_request
 
     def is_simple_task(self, request: str) -> bool:

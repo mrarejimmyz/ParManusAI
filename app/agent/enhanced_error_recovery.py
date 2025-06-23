@@ -27,6 +27,7 @@ class ErrorType(Enum):
     PERMISSION_DENIED = "permission_denied"
     TASK_COMPLEXITY = "task_complexity"
     INFINITE_LOOP = "infinite_loop"
+    DICT_LOWER_ERROR = "dict_lower_error"  # New error type for dict.lower() issues
     UNKNOWN = "unknown"
 
 
@@ -41,6 +42,7 @@ class RecoveryStrategy(Enum):
     USE_ALTERNATIVE_TOOL = "use_alternative_tool"
     SKIP_AND_CONTINUE = "skip_and_continue"
     ABORT_GRACEFULLY = "abort_gracefully"
+    APPLY_STRING_SAFETY = "apply_string_safety"  # New strategy for dict.lower() errors
 
 
 class EnhancedErrorRecovery:
@@ -149,6 +151,13 @@ class EnhancedErrorRecovery:
                 "loop.*detected",
                 "stuck.*state",
             ],
+            ErrorType.DICT_LOWER_ERROR: [
+                "'dict' object has no attribute 'lower'",
+                "dict.*lower",
+                "AttributeError.*lower",
+                "object has no attribute.*lower",
+                "lower.*dict",
+            ],
         }
 
     def _initialize_recovery_strategies(self) -> Dict[ErrorType, RecoveryStrategy]:
@@ -165,6 +174,7 @@ class EnhancedErrorRecovery:
             ErrorType.PERMISSION_DENIED: RecoveryStrategy.FALLBACK_APPROACH,
             ErrorType.TASK_COMPLEXITY: RecoveryStrategy.BREAK_DOWN_TASK,
             ErrorType.INFINITE_LOOP: RecoveryStrategy.SIMPLIFY_TASK,
+            ErrorType.DICT_LOWER_ERROR: RecoveryStrategy.APPLY_STRING_SAFETY,
             ErrorType.UNKNOWN: RecoveryStrategy.RETRY_WITH_DELAY,
         }
 
@@ -172,6 +182,10 @@ class EnhancedErrorRecovery:
         self, error_message: str, context: Dict = None
     ) -> ErrorType:
         """Classify an error based on its message and context."""
+        # Ensure error_message is a string before calling .lower()
+        if not isinstance(error_message, str):
+            error_message = str(error_message)
+
         error_lower = error_message.lower()
 
         # Check each error type pattern
@@ -208,9 +222,7 @@ class EnhancedErrorRecovery:
             "steps": [],
             "fallback_strategies": [],
             "estimated_success_rate": 0.5,
-        }
-
-        # Generate specific recovery steps based on strategy
+        }  # Generate specific recovery steps based on strategy
         if strategy == RecoveryStrategy.FIX_CODE:
             recovery_plan["steps"] = await self._generate_code_fix_steps(
                 error_message, context
@@ -237,6 +249,14 @@ class EnhancedErrorRecovery:
             recovery_plan["steps"] = await self._generate_breakdown_steps(context)
             recovery_plan["estimated_success_rate"] = 0.8
 
+        elif strategy == RecoveryStrategy.APPLY_STRING_SAFETY:
+            recovery_plan["steps"] = await self._generate_string_safety_steps(
+                error_message, context
+            )
+            recovery_plan["estimated_success_rate"] = (
+                0.95  # High success rate for this fix
+            )
+
         else:
             recovery_plan["steps"] = ["Apply generic recovery approach"]
             recovery_plan["estimated_success_rate"] = 0.4
@@ -253,6 +273,10 @@ class EnhancedErrorRecovery:
     ) -> List[str]:
         """Generate steps to fix code-related errors."""
         steps = []
+
+        # Ensure error_message is a string before calling .lower()
+        if not isinstance(error_message, str):
+            error_message = str(error_message)
 
         if "syntax" in error_message.lower():
             steps.append("Fix syntax errors in the code")
@@ -369,6 +393,10 @@ class EnhancedErrorRecovery:
             for i, step in enumerate(steps, 1):
                 logger.info(f"📋 Recovery step {i}/{len(steps)}: {step}")
 
+                # Ensure step is a string before calling .lower()
+                if not isinstance(step, str):
+                    step = str(step)
+
                 # Execute specific recovery actions based on step content
                 if "simplify" in step.lower() and "task" in step.lower():
                     if original_request and task_simplifier:
@@ -391,6 +419,13 @@ class EnhancedErrorRecovery:
                     wait_time = int(wait_match.group(1)) if wait_match else 2
                     logger.info(f"⏳ Waiting {wait_time} seconds...")
                     await asyncio.sleep(wait_time)
+
+                elif "string safety" in step.lower() or "safe_lower" in step.lower():
+                    # Apply string safety fixes for dict.lower() errors
+                    logger.info("🛡️ Applying autonomous string safety protection")
+                    # The string safety utilities are already imported and available
+                    # This signals that the system should use safe_lower() instead of .lower()
+                    logger.info("✅ String safety protection activated")
 
                 else:
                     # Generic step execution
@@ -429,7 +464,12 @@ class EnhancedErrorRecovery:
             "out of memory",
         ]
 
+        # Ensure error_message is a string before calling .lower()
+        if not isinstance(error_message, str):
+            error_message = str(error_message)
+
         error_lower = error_message.lower()
+
         for pattern in critical_patterns:
             if pattern in error_lower:
                 logger.warning(
@@ -441,6 +481,10 @@ class EnhancedErrorRecovery:
 
     def _generate_error_key(self, error_message: str, context: Dict = None) -> str:
         """Generate a unique key for error tracking."""
+        # Ensure error_message is a string before slicing
+        if not isinstance(error_message, str):
+            error_message = str(error_message)
+
         # Use first 50 characters of error message + tool name if available
         error_key = error_message[:50]
         if context and "tool_name" in context:
@@ -517,3 +561,24 @@ class EnhancedErrorRecovery:
         """Reset recovery attempt counters (useful for new sessions)."""
         self.recovery_attempts.clear()
         logger.info("🔄 Recovery attempt counters reset")
+
+    async def _generate_string_safety_steps(
+        self, error_message: str, context: Dict = None
+    ) -> List[str]:
+        """Generate steps to fix dict.lower() errors with string safety."""
+        steps = [
+            "Apply string safety utilities to prevent dict.lower() errors",
+            "Replace direct .lower() calls with safe_lower() function",
+            "Import string_safety utilities in affected modules",
+            "Validate all data types before string operations",
+            "Apply autonomous protection to prevent future occurrences",
+        ]
+
+        # Add specific steps based on the error context
+        if context and "tool_call" in context:
+            steps.append("Fix tool parameter processing to use safe string operations")
+
+        if "thinking" in str(context).lower() if context else False:
+            steps.append("Fix thinking engine to use safe string operations")
+
+        return steps

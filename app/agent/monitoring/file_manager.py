@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Set
 
 from app.logger import logger
+from app.utils.string_safety import safe_lower
 
 from .models import ActionHistory, FileTracker, TaskState
 
@@ -49,7 +50,7 @@ class FileManager:
 
             # Group files by similar patterns
             for file_path in glob.glob(os.path.join(self.workspace_path, "*.md")):
-                basename = os.path.basename(file_path).lower()
+                basename = safe_lower(os.path.basename(file_path))
 
                 # Extract topic from filename
                 key_patterns = [

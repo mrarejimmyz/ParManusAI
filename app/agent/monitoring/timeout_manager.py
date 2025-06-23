@@ -7,6 +7,7 @@ from collections import deque
 from typing import Any, Dict, List
 
 from app.logger import logger
+from app.utils.string_safety import safe_lower
 
 from .models import ActionHistory
 
@@ -23,7 +24,8 @@ class TimeoutManager:
         similar_actions = [
             h
             for h in self.action_history
-            if action.lower() in h.action.lower() or h.action.lower() in action.lower()
+            if safe_lower(action) in safe_lower(h.action)
+            or safe_lower(h.action) in safe_lower(action)
         ]
 
         if similar_actions:
@@ -72,17 +74,17 @@ class TimeoutManager:
 
         # Check for computation-heavy actions
         computation_keywords = ["search", "analyze", "process", "generate", "scrape"]
-        if any(keyword in action.lower() for keyword in computation_keywords):
+        if any(keyword in safe_lower(action) for keyword in computation_keywords):
             return {"likely_cause": "heavy_computation"}
 
         # Check for network-related actions
         network_keywords = ["web", "url", "download", "fetch", "api"]
-        if any(keyword in action.lower() for keyword in network_keywords):
+        if any(keyword in safe_lower(action) for keyword in network_keywords):
             return {"likely_cause": "network_delay"}
 
         # Check for repeated similar actions (stuck pattern)
         similar_recent = sum(
-            1 for h in recent_actions if action.lower() in h.action.lower()
+            1 for h in recent_actions if safe_lower(action) in safe_lower(h.action)
         )
         if similar_recent >= 3:
             return {"likely_cause": "stuck_pattern"}

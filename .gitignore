@@ -294,50 +294,6 @@ verify_gpy.py
 
 models/Llama-3.2-11B-Vision-Instruct.Q4_K_M.gguf
 sessions/last_session.json
-test_crypto_agent.py
-test_crypto_simple.py
-test_direct_reports.py
-test_manus_functions.py
-TEST_RESULTS_SUMMARY.md
-test_simple_integration.py
-TERMINAL_ANALYSIS_FIXES.md
-test_direct_llm_reasoning.py
-test_intelligent_creation.py
-test_quick_crypto.py
-test_reasoning_resume.py
-test_resume_creation.py
-test_air_india_fix.py
-test_complete_flow.py
-test_llm_direct_fixed.py
-test_llm_direct.py
-app/tool/nodriver_search.py
-test_multi_search.py
-CLEANUP_SUMMARY.md
-FINAL_CLEANUP_COMPLETE.md
-SINGLE_MODEL_UPDATE.md
-LLM_INTERFACE_FIX.md
-create_air_india_report.py
-REPOSITORY_CLEANUP_COMPLETE.md
-MODULARIZATION_COMPLETE.md
-MODULARIZATION_PERFECTLY_ORGANIZED.md
-REPORT_COMPLETION_FIX.md
-app/agent/report_manager.py
-AGENT_STOPPING_ANALYSIS.md
-COMPREHENSIVE_WORKSPACE_ANALYSIS.md
-FINAL_STATUS_REPORT.md
-WORKFLOW_FIXES_COMPLETE.md
-SMART_MONITOR_INTEGRATION_COMPLETE.md
-PROJECT_CLEANUP_COMPLETE.md
-SMART_MONITOR_DUPLICATE_PREVENTION_COMPLETE.md
-COMPREHENSIVE_REFACTORING_PLAN.md
-TOOL_NAME_PROPERTY_FIX.md
-TOOL_MIGRATION_COMPLETE.md
-REFACTORING_PROGRESS_UPDATE.md
-FINAL_REFACTORING_COMPLETION_PLAN.md
-FILE_SIZE_ANALYSIS.md
-AI_COLLABORATION_BREAKTHROUGH.md
-STEALTH_OPTIMIZATION_VERIFICATION.md
-TECHNICAL_INCONSISTENCIES_RESOLVED.md
 
 # Additional development test files and workspaces
 test_workspace/
@@ -433,3 +389,24 @@ test_autonomous.txt
 
 # New utility directories
 app/utils/
+
+# Additional development patterns
+*_clean.py
+*_updated.py
+*_enhanced.py
+search_enhanced_*.py
+
+# Assessment and analysis files
+*_ASSESSMENT*.md
+
+# Additional specific development files that don't match general patterns
+app/agent/action_memory.py
+app/agent/intelligent_tool_filter.py
+app/agent/report_manager.py
+app/agent/self_healing_system.py
+app/tool/ask_vision.py
+app/tool/nodriver_search.py
+app/tool/llm_analysis_report.py
+app/tool/core/hallucination_detector.py
+agent_performance_optimization.py
+ai_collaboration_system.py
