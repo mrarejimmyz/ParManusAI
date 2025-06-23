@@ -1,14 +1,16 @@
-### Project-specific ###
-# Logs
+### ParManus AI Agent System ###
+
+# Core directories to ignore
 logs/
-
-# Data
 data/
-
-# Workspace
 workspace/
+sessions/
+models/
+archive/
+backup_legacy_llm/
+chromium/
 
-# Test files - All test scripts during development (exclude tests/ directory)
+# Development and testing files
 test_*.py
 debug_*.py
 apply_*.py
@@ -16,19 +18,55 @@ fix_*.py
 verify_*.py
 validate_*.py
 final_*.py
+comprehensive_*.py
+ultimate_*.py
+prove_*.py
+quick_*.py
+simple_*.py
+manual_*.py
+critical_*.py
+enhanced_*.py
+force_*.py
+diagnose_*.py
 
-# Keep legitimate run files but exclude development ones
+# Development utility scripts (addressing organization issues)
+*_cleanup.py
+*_optimization.py
+*_performance*.py
+*_test.py
+codebase_analysis.py
+dependency_cleanup.py
+dependency_tracker.py
+project_cleanup.py
+improved_cleanup.py
+solution_summary.py
+agent_performance_optimization.py
+ai_collaboration_system.py
+
+# Keep only legitimate production files
 run_code_only.py
 
-# Development documentation - Temporary status reports and summaries
+# Documentation and status files (addressing quality issues)
 *_COMPLETE*.md
 *_SUMMARY.md
 *_ANALYSIS.md
 *_PLAN.md
 *_STATUS*.md
-*_FIXES*.md
+*_FIXES.md
 *_UPDATE*.md
 *_PROGRESS*.md
+*_REPORT*.md
+*_DEBUG*.md
+*_INTEGRATION*.md
+*_OPTIMIZATION*.md
+*_IMPLEMENTATION*.md
+*_RESOLUTION*.md
+*_FIX*.md
+*_SUCCESS*.md
+*_VERIFICATION*.md
+*_ASSESSMENT*.md
+
+# Project-specific documentation patterns
 MISSION_*.md
 REFACTORING_*.md
 MODULARIZATION_*.md
@@ -46,8 +84,18 @@ AGENT_*.md
 DUPLICATE_*.md
 MANUS_*.md
 HYBRID_*.md
+GITIGNORE_*.md
+HONEST_*.md
+INFINITE_*.md
+REDUNDANCY_*.md
+STEALTH_*.md
+TECHNICAL_*.md
+VISION_*.md
+NODRIVER_*.md
+HALLUCINATION_*.md
+TROUBLESHOOTING.md
 
-# Backup and refactored files
+# Backup and refactored files (addressing code quality issues)
 *_refactored.py
 *_new.py
 *_backup.py
@@ -57,31 +105,77 @@ HYBRID_*.md
 *_optimized.py
 *_legacy.py
 *_original.py
-*_simple.py
 *_old.py
+*_clean.py
+*_updated.py
+*_enhanced.py
 *.old
 *.backup
 *_backup
 *_core.py.backup
+*.unused_backup
 
-# Temporary and generated files
+# Generated and temporary files
 *.whl
-*.old
+*.tmp
 trump_*_report.md
 simple_report.md
-*.tmp
+analysis_result.json
+apple_test_data.json
+google_results_debug.png
+improved_search_results.json
+search_results.md
+test_result.md
+test_results_*.json
+test_image.png
+trump_presidency_report.md
 
-# Additional development files that shouldn't be committed
+# Development and architecture files (specific to identified issues)
 app/ollama_llm.py
 app/agent/actions/*_refactored.py
 app/agent/*_refactored.py
 app/agent/*_new.py
 app/llm/*_new.py
 app/search/*_refactored.py
+app/utils/
 
-# Backup and temporary files
+# Specific development files that indicate architectural issues
+app/agent/action_memory.py
+app/agent/intelligent_tool_filter.py
+app/agent/report_manager.py
+app/agent/self_healing_system.py
+app/tool/ask_vision.py
+app/tool/nodriver_search.py
+app/tool/llm_analysis_report.py
+app/tool/core/hallucination_detector.py
+search_enhanced_*.py
 
-### Python ###
+# Test workspaces and directories (addressing organization issues)
+test_workspace/
+optimized_test_workspace/
+ultra_optimized_workspace/
+workspace_complete_test/
+workspace_search_test/
+comprehensive_test_workspace/
+final_verification_test/
+simple_multi_test/
+final_multi_test/
+multi_task_test/
+robustness_test_*/
+definitive_test/
+end_to_end_test/
+final_verification/
+focused_test/
+manual_test/
+test_debug/
+direct_test/
+specific_test/
+test/
+reports/
+research_report/
+comprehensive_report/
+agent_test_output/
+agent_verification/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -383,30 +477,8 @@ examples/cat.png
 sessions/
 
 # Additional logs and temporary files
-logs/
 test_query.txt
 test_autonomous.txt
 
-# New utility directories
-app/utils/
 
-# Additional development patterns
-*_clean.py
-*_updated.py
-*_enhanced.py
-search_enhanced_*.py
-
-# Assessment and analysis files
-*_ASSESSMENT*.md
-
-# Additional specific development files that don't match general patterns
-app/agent/action_memory.py
-app/agent/intelligent_tool_filter.py
-app/agent/report_manager.py
-app/agent/self_healing_system.py
-app/tool/ask_vision.py
-app/tool/nodriver_search.py
-app/tool/llm_analysis_report.py
-app/tool/core/hallucination_detector.py
-agent_performance_optimization.py
-ai_collaboration_system.py
+REPOSITORY_IMPROVEMENTS.md
