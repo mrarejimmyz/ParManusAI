@@ -91,8 +91,67 @@ class EnhancedUnifiedSearchTool(BaseTool):
         logger.info(f"🔍 Executing fast web search: '{query}'")
 
         try:
-            # Try NoDriver + Vision first (completely FREE and powerful)
-            search_results = await self._nodriver_vision_search(query, num_results, search_type)
+            # Try enhanced ultra-stealth search first (with 3-phase navigation)
+            try:
+                from app.tool.implementations.enhanced_ultra_stealth_search import \
+                    EnhancedUltraStealthSearchTool
+
+                logger.info(f"🥷 Using Enhanced Ultra-Stealth Search with 3-phase navigation")
+                enhanced_stealth_tool = EnhancedUltraStealthSearchTool(llm=self.llm)
+
+                result = await enhanced_stealth_tool._execute(
+                    query=query,
+                    num_results=num_results,
+                    timeout=45,
+                    extraction_mode="balanced"
+                )
+
+                if result.success and result.content.get("results"):
+                    search_results = result.content["results"]
+                    logger.info(f"✅ Enhanced stealth search successful: {len(search_results)} real results")
+                else:
+                    logger.info(f"⚠️ Enhanced stealth search failed: {result.content.get('error', 'No results')}")
+                    search_results = []
+
+            except ImportError as e:
+                logger.warning(f"⚠️ Enhanced stealth search tool import failed: {e}, falling back to hybrid search")
+                search_results = []
+            except Exception as e:
+                logger.warning(f"⚠️ Enhanced stealth search failed: {e}, falling back to hybrid search")
+                search_results = []
+
+            # Fallback to hybrid fast search if enhanced stealth fails
+            if not search_results:
+                try:
+                    from app.tool.implementations.hybrid_fast_search import \
+                        HybridFastSearchTool
+
+                    logger.info(f"🚀 Falling back to hybrid fast search")
+                    hybrid_tool = HybridFastSearchTool(llm=self.llm)
+
+                    result = await hybrid_tool._execute(
+                        query=query,
+                        num_results=num_results,
+                        timeout=30
+                    )
+
+                    if result.success and result.content.get("results"):
+                        search_results = result.content["results"]
+                        logger.info(f"✅ Hybrid search successful: {len(search_results)} results")
+                    else:
+                        logger.info(f"⚠️ Hybrid search failed: {result.content.get('error', 'No results')}")
+                        search_results = []
+
+                except ImportError as e:
+                    logger.warning(f"⚠️ Hybrid search tool import failed: {e}, falling back to NoDriver Vision")
+                    search_results = []
+                except Exception as e:
+                    logger.warning(f"⚠️ Hybrid search tool failed: {e}, falling back to NoDriver Vision")
+                    search_results = []
+
+            # Fallback to NoDriver + Vision if hybrid fails
+            if not search_results:
+                search_results = await self._nodriver_vision_search(query, num_results, search_type)
 
             if search_results:
                 logger.info(f"✅ NoDriver Vision search successful: {len(search_results)} results")
@@ -1902,14 +1961,15 @@ Continued observation and analysis will be necessary as this situation develops 
                 "&q=",
                 "google.com",
                 "bing.com",
-                "yahoo.com",
-                "duckduckgo.com",
+                "yahoo.com",                "duckduckgo.com",
             ]
 
             url_lower = url.lower()
             for pattern in invalid_patterns:
                 if pattern in url_lower:
-                    return False  # Must have a reasonable domain
+                    return False
+
+            # Must have a reasonable domain
             if not domain or domain.count(".") < 1:
                 return False
 
@@ -1919,14 +1979,14 @@ Continued observation and analysis will be necessary as this situation develops 
             return False
 
     async def _nodriver_vision_search(self, query: str, num_results: int, search_type: str) -> List[Dict]:
-        """Use NoDriver + Vision for completely free search."""
+        """Use Fast NoDriver + Vision for completely free search."""
         try:
-            from app.tool.implementations.nodriver_vision_search import \
-                NoDriverVisionSearchTool
+            from app.tool.implementations.nodriver_vision_search_fast import \
+                FastNoDriverVisionSearchTool
 
-            logger.info(f"👁️ Using NoDriver + Vision search (FREE)")
-              # Create the vision search tool
-            vision_tool = NoDriverVisionSearchTool(llm=self.llm)
+            logger.info(f"� Using Fast NoDriver + Vision search (FREE)")
+            # Create the fast vision search tool
+            vision_tool = FastNoDriverVisionSearchTool(llm=self.llm)
 
             # Debug: Verify LLM is passed correctly
             logger.info(f"🔍 Passing LLM to vision tool: {type(self.llm)} (enabled: {getattr(self.llm, 'vision_enabled', 'unknown')})")
@@ -1938,14 +1998,11 @@ Continued observation and analysis will be necessary as this situation develops 
                 "academic": "startpage"
             }
 
-            search_engine = engine_mapping.get(search_type, "duckduckgo")
-
-            # Execute the vision search
+            search_engine = engine_mapping.get(search_type, "duckduckgo")            # Execute the fast vision search
             result = await vision_tool._execute(
                 query=query,
                 num_results=num_results,
-                search_engine=search_engine,
-                stealth_level="high"
+                timeout=30  # Fast 30s timeout
             )
 
             if result.success and result.content.get("results"):

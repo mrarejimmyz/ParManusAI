@@ -7,9 +7,8 @@ SYSTEM_PROMPT = (
     "2. Use multiple sources (search + browser) for comprehensive analysis\n"
     "3. Generate professional, well-structured reports with your findings\n"
     "4. Create clear action plans and execute them systematically\n"
-    "5. Provide detailed, actionable insights and recommendations\n\n"
-    "RESEARCH WORKFLOW:\n"
-    "1. Use enhanced_search to gather initial research data\n"
+    "5. Provide detailed, actionable insights and recommendations\n\n"    "RESEARCH WORKFLOW:\n"
+    "1. Use web_search to gather initial research data\n"
     "2. Use enhanced_browser to get detailed information from key sources\n"
     "3. Collect and organize all research findings\n"
     "4. Use generate_analysis_report to create professional reports\n"
@@ -28,7 +27,7 @@ NEXT_STEP_PROMPT = """
 You are executing a research and analysis task. Follow this systematic process:
 
 1. RESEARCH PHASE (for analysis/report requests):
-   - First, use enhanced_search to gather initial data on the topic
+   - First, use web_search to gather initial data on the topic
    - Then use enhanced_browser to get detailed information from key sources
    - Collect comprehensive research data before generating reports
 
@@ -40,7 +39,7 @@ You are executing a research and analysis task. Follow this systematic process:
    - Save the report with a descriptive filename
 
 3. WORKFLOW FOR RESEARCH REPORTS:
-   - enhanced_search: Initial data gathering → SAVE THE RESULTS
+   - web_search: Initial data gathering → SAVE THE RESULTS
    - enhanced_browser: Detailed source analysis → COMBINE WITH SEARCH DATA
    - generate_analysis_report: Pass ALL collected research data as research_data parameter
    - Never call generate_analysis_report without first collecting and passing research data

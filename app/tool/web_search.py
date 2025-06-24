@@ -1,17 +1,18 @@
 """
-Web Search Tool - Enhanced Wrapper with Intelligent Scraping
-Now uses advanced search tool with IntelligentScraper for multi-strategy content fetching
+Web Search Tool - Enhanced Wrapper with NoDriver Vision Search
+Now uses the fixed FastNoDriverVisionSearchTool for reliable search with content extraction
 """
 
 from app.logger import logger
-from app.tool.implementations.search_enhanced import EnhancedUnifiedSearchTool
+from app.tool.implementations.nodriver_vision_search_fast import \
+    FastNoDriverVisionSearchTool
 
-# Use the enhanced implementation with intelligent scraping
-WebSearch = EnhancedUnifiedSearchTool
+# Use the fixed NoDriver implementation that actually works
+WebSearch = FastNoDriverVisionSearchTool
 
 # Keep the interface consistent for existing code
 __all__ = ["WebSearch"]
 
 logger.info(
-    "🧠 Web Search Tool now uses INTELLIGENT SCRAPING with multi-strategy fallback"
+    "🧠 Web Search Tool now uses FIXED NODRIVER SEARCH with working blue link detection"
 )

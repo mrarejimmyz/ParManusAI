@@ -461,6 +461,12 @@ HALLUCINATION_*.md
 HYBRID_*.md
 TROUBLESHOOTING.md
 
+# Analysis reports and test outputs (specific patterns)
+main_py_analysis_report.md
+terminal_analysis_report.md
+*_analysis_report.md
+MAIN_PY_TESTING_REPORT_FILES_ANALYSIS.md
+
 # Archive and backup directories
 archive/
 backup_legacy_llm/
@@ -494,4 +500,38 @@ ddg_content_sample.html
 .vscode/settings.json
 .vs/parmanus/v17/DocumentLayout.backup.json
 .vscode/settings.json
+
+# Debug screenshots and HTML files (timestamped files from browser automation)
+duckduckgo.com___*.jpg
+*.com___*.jpg
+*_debug.html
+ddg_debug.html
+bing_debug.html
+ddg_content_sample.html
+bing_search_debug.html
+
+# Debug PNG images and visual debugging files
+blue_link_*.png
+blue_titles_*.png
+debug_*.png
+*_debug.png
+*_highlighted.png
+*_search.png
+
+# Additional test and debug script patterns
+*_agent_*.py
+check_*.py
+analyze_*.py
+create_test_*.py
+generate_*.py
+integrate_*.py
+run_*.py
+setup_*.py
+*_system.py
+*_test_*.py
+
+# Additional backup file patterns
+*.py.backup
+*_broken.py.backup
+nodriver_vision_search_fast_broken.py.backup
 
