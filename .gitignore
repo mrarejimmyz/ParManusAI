@@ -137,7 +137,6 @@ app/agent/*_refactored.py
 app/agent/*_new.py
 app/llm/*_new.py
 app/search/*_refactored.py
-app/utils/
 
 # Specific development files that indicate architectural issues
 app/agent/action_memory.py
@@ -147,7 +146,6 @@ app/agent/self_healing_system.py
 app/tool/ask_vision.py
 app/tool/nodriver_search.py
 app/tool/llm_analysis_report.py
-app/tool/core/hallucination_detector.py
 search_enhanced_*.py
 
 # Test workspaces and directories (addressing organization issues)

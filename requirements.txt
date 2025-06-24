@@ -41,6 +41,15 @@ anyio>=3.6.0
 # HTTP client enhancements
 urllib3>=2.0.0
 
+# Async HTTP operations (required for hallucination detector and web tools)
+aiohttp>=3.8.0
+
+# Model Context Protocol support
+mcp>=1.0.0
+
+# WebSocket support for real-time communications
+websockets>=11.0.0
+
 # Optional: Voice interaction (uncomment if needed)
 # pyttsx3~=2.90
 # SpeechRecognition~=3.10.4
@@ -49,7 +58,7 @@ urllib3>=2.0.0
 # fastapi~=0.115.11
 # uvicorn~=0.34.0
 # numpy
-# pillow~=11.1.0
+# pillow~=11.1.0  # For image processing in vision tools
 # pandas
 # matplotlib
 
