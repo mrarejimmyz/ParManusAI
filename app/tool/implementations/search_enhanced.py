@@ -67,6 +67,7 @@ class EnhancedUnifiedSearchTool(BaseTool):
         """Execute fast web search."""
         query = kwargs.get("query", "").strip()
         num_results = kwargs.get("num_results", 5)
+        search_type = kwargs.get("search_type", "web")
 
         # Ensure num_results is an integer
         if isinstance(num_results, str):
@@ -90,20 +91,29 @@ class EnhancedUnifiedSearchTool(BaseTool):
         logger.info(f"🔍 Executing fast web search: '{query}'")
 
         try:
-            # Try DuckDuckGo first (faster and more reliable)
-            search_results = await self._duckduckgo_search(query, num_results)
+            # Try NoDriver + Vision first (completely FREE and powerful)
+            search_results = await self._nodriver_vision_search(query, num_results, search_type)
 
-            # If DuckDuckGo fails, try Google as fallback
+            if search_results:
+                logger.info(f"✅ NoDriver Vision search successful: {len(search_results)} results")
+            else:
+                # Fall back to traditional DuckDuckGo scraping
+                logger.info("🔄 NoDriver Vision failed, trying DuckDuckGo scraping as fallback")
+                search_results = await self._duckduckgo_search(query, num_results)
+
+            # If both fail, try Google as fallback
             if not search_results:
                 logger.info("🔄 DuckDuckGo failed, trying Google as fallback")
                 search_results = await self._google_search(query, num_results)
 
-            # If both fail, provide fallback results
+            # If all real searches fail, provide LLM fallback with clear warning
             if not search_results:
-                logger.warning("🔄 Both searches failed, providing fallback")
+                logger.warning("🔄 All real searches failed, providing LLM fallback with warnings")
                 search_results = await self._provide_fallback_results(
                     query, num_results
-                )  # Try to fetch actual content from top results for better analysis (with optimized timeout)
+                )
+
+            # Try to fetch actual content from top results for better analysis (with optimized timeout)
             try:
                 enhanced_results = await asyncio.wait_for(
                     self._enhance_results_with_content(
@@ -1378,7 +1388,8 @@ Respond in JSON format:
     async def _extract_with_nodriver_direct(self, url: str) -> str:
         """Direct NoDriver stealth extraction with enhanced anti-bot bypass."""
         try:
-            from app.search.scrapers.nodriver_scraper_enhanced import NoDriverScraper
+            from app.search.scrapers.nodriver_scraper_enhanced import \
+                NoDriverScraper
 
             logger.info(f"🥷 NoDriver direct stealth extraction: {url}")
 
@@ -1442,9 +1453,8 @@ Focus on extracting actionable insights from the actual webpage content. Be fact
             # Import vision capabilities
             from app.config import config
             from app.llm.core import OllamaProvider, UnifiedLLM
-            from app.tool.implementations.browser_enhanced import (
-                EnhancedUnifiedBrowserTool,
-            )
+            from app.tool.implementations.browser_enhanced import \
+                EnhancedUnifiedBrowserTool
 
             logger.info(
                 f"🔍🥷 Using NoDriver-powered browser tool with vision for: {url}"
@@ -1907,6 +1917,50 @@ Continued observation and analysis will be necessary as this situation develops 
 
         except Exception:
             return False
+
+    async def _nodriver_vision_search(self, query: str, num_results: int, search_type: str) -> List[Dict]:
+        """Use NoDriver + Vision for completely free search."""
+        try:
+            from app.tool.implementations.nodriver_vision_search import \
+                NoDriverVisionSearchTool
+
+            logger.info(f"👁️ Using NoDriver + Vision search (FREE)")
+              # Create the vision search tool
+            vision_tool = NoDriverVisionSearchTool(llm=self.llm)
+
+            # Debug: Verify LLM is passed correctly
+            logger.info(f"🔍 Passing LLM to vision tool: {type(self.llm)} (enabled: {getattr(self.llm, 'vision_enabled', 'unknown')})")
+
+            # Map search types to search engines
+            engine_mapping = {
+                "news": "bing",  # Bing is better for news
+                "web": "duckduckgo",
+                "academic": "startpage"
+            }
+
+            search_engine = engine_mapping.get(search_type, "duckduckgo")
+
+            # Execute the vision search
+            result = await vision_tool._execute(
+                query=query,
+                num_results=num_results,
+                search_engine=search_engine,
+                stealth_level="high"
+            )
+
+            if result.success and result.content.get("results"):
+                logger.info(f"✅ NoDriver Vision found {len(result.content['results'])} results")
+                return result.content["results"]
+            else:
+                logger.warning(f"⚠️ NoDriver Vision failed: {result.content.get('error', 'Unknown error')}")
+                return []
+
+        except ImportError:
+            logger.warning("⚠️ NoDriver Vision tool not available")
+            return []
+        except Exception as e:
+            logger.error(f"❌ NoDriver Vision search failed: {e}")
+            return []
 
 
 # Alias for backwards compatibility

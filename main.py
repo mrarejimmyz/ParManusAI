@@ -43,15 +43,10 @@ except ImportError as e:
 
 from app.agent_router import route_agent
 from app.agent_wrappers import create_agent
-
 # Import refactored components
 from app.config import Config, load_config
-from app.main_utils import (
-    check_and_process_todo,
-    display_startup_info,
-    initialize_system,
-    process_prompt,
-)
+from app.main_utils import (check_and_process_todo, display_startup_info,
+                            initialize_system, process_prompt)
 
 
 async def main():
