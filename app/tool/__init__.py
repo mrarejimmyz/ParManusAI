@@ -2,7 +2,6 @@ from app.tool.bash import Bash
 from app.tool.browser_use_tool import BrowserUseTool
 from app.tool.core.base import BaseTool, ToolRegistry, ToolResult
 from app.tool.create_chat_completion import CreateChatCompletion
-
 # Import unified implementations
 from app.tool.implementations.browser_enhanced import UnifiedBrowserTool
 from app.tool.implementations.search_enhanced import UnifiedSearchTool

@@ -1,21 +1,23 @@
 """
 Convert Markdown to PDF using Python
 """
-import markdown
-from weasyprint import HTML, CSS
-from pathlib import Path
 import sys
+from pathlib import Path
+
+import markdown
+from weasyprint import CSS, HTML
+
 
 def md_to_pdf(md_file_path, output_pdf_path=None):
     """Convert Markdown file to PDF"""
-    
+
     # Read the markdown file
     with open(md_file_path, 'r', encoding='utf-8') as f:
         md_content = f.read()
-    
+
     # Convert markdown to HTML
     html = markdown.markdown(md_content, extensions=['tables', 'fenced_code'])
-    
+
     # Add basic CSS styling
     styled_html = f"""
     <html>
@@ -74,12 +76,12 @@ def md_to_pdf(md_file_path, output_pdf_path=None):
     </body>
     </html>
     """
-    
+
     # Set output path
     if output_pdf_path is None:
         md_path = Path(md_file_path)
         output_pdf_path = md_path.with_suffix('.pdf')
-    
+
     try:
         # Convert HTML to PDF using weasyprint
         html_doc = HTML(string=styled_html)
@@ -95,8 +97,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python md_to_pdf.py <markdown_file> [output_pdf]")
         sys.exit(1)
-    
+
     md_file = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else None
-    
+
     md_to_pdf(md_file, output_file)
