@@ -32,6 +32,9 @@ docker>=7.0.0
 lxml>=4.9.0
 html5lib>=1.1
 
+# PDF generation
+reportlab>=4.0.0
+
 # JSON and YAML processing (built-in: json, but for advanced features)
 jsonschema>=4.17.0
 

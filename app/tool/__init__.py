@@ -6,6 +6,7 @@ from app.tool.create_chat_completion import CreateChatCompletion
 # Import unified implementations
 from app.tool.implementations.browser_enhanced import UnifiedBrowserTool
 from app.tool.implementations.search_enhanced import UnifiedSearchTool
+from app.tool.markdown_to_pdf import MarkdownToPDFTool
 from app.tool.planning import PlanningTool
 from app.tool.python_execute import PythonExecute
 from app.tool.str_replace_editor import StrReplaceEditor
@@ -26,6 +27,7 @@ __all__ = [
     "CreateChatCompletion",
     "PlanningTool",
     "PythonExecute",
+    "MarkdownToPDFTool",
     # Unified implementations
     "UnifiedBrowserTool",
     "UnifiedSearchTool",
