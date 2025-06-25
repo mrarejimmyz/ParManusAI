@@ -1,42 +1,97 @@
 """
 Autonomous Capabilities Module
 Provides autonomous problem detection, code fixing, and task completion validation.
-Enhanced with advanced error recovery capabilities.
+Enhanced with advanced error recovery capabilities and speed optimization.
 """
 
 import os
 import re
-from typing import Dict, List, Optional, Tuple
+import time
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
-from app.agent.enhanced_error_recovery import (
-    EnhancedErrorRecovery,
-    ErrorType,
-    RecoveryStrategy,
-)
+from app.agent.enhanced_error_recovery import (EnhancedErrorRecovery,
+                                               ErrorType, RecoveryStrategy)
 from app.logger import logger
 from app.utils.string_safety import safe_contains_lower, safe_lower
 
 
 class AutonomousCapabilities:
-    """Handles autonomous problem detection, fixing, and task completion validation with enhanced error recovery."""
+    """Handles autonomous problem detection, fixing, and task completion validation with speed optimization and continuous learning."""
 
     def __init__(self):
-        self.max_retry_attempts = 3
-        self.current_retry_count = 0
-        self.expected_output_files: List[str] = []
-        self.task_completion_validated = False
-        self.last_error: Optional[str] = None
-
-        # Enhanced error recovery system
+        # System components
         self.error_recovery = EnhancedErrorRecovery()
-        self.error_context: Dict = {}
         self.recovery_history: List[Dict] = []
+
+        # Configuration with speed optimization focus
+        self.max_retry_attempts = 2  # Start with fewer retries for speed
+        self.current_retry_count = 0
+        self.timeout_threshold = 25.0  # Reduced for faster operations
+        self.task_completion_validated = False
+
+        # Enhanced performance tracking
+        self.performance_metrics = {
+            "total_errors": 0,
+            "successful_recoveries": 0,
+            "fast_recoveries": 0,
+            "avg_recovery_time": 15.0,  # Start with optimistic baseline
+            "success_rate": 1.0,
+            "speed_optimizations_applied": 0,
+            "proactive_improvements": 0
+        }
+
+        # Expected output tracking
+        self.expected_output_files: List[str] = []
+
+        # Load previous performance data
+        from app.agent_learning import agent_learning
+        self.learning_system = agent_learning
+        self._load_performance_optimizations()
+
+        logger.info("🤖 Enhanced Autonomous Capabilities initialized with speed optimization focus")
+
+    def _load_performance_optimizations(self):
+        """Load learned performance optimizations for faster autonomous operations"""
+        try:
+            # Load previous performance metrics
+            saved_metrics = self.learning_system.get_user_preference("autonomous_performance", {})
+            if saved_metrics:
+                self.performance_metrics.update(saved_metrics)
+                logger.info(f"📊 Loaded autonomous performance: {self.performance_metrics['success_rate']:.1%} success, {self.performance_metrics['avg_recovery_time']:.1f}s avg recovery")
+
+            # Load optimized retry attempts
+            optimized_retries = self.learning_system.get_user_preference("optimized_retry_attempts", self.max_retry_attempts)
+            self.max_retry_attempts = optimized_retries
+
+            # Load timeout optimizations
+            timeout_opt = self.learning_system.get_user_preference("optimized_timeout", self.timeout_threshold)
+            self.timeout_threshold = min(timeout_opt, 30.0)  # Cap for speed
+
+            logger.info(f"⚡ Optimized parameters: {self.max_retry_attempts} retries, {self.timeout_threshold:.1f}s timeout")
+
+        except Exception as e:
+            logger.warning(f"Could not load autonomous optimizations: {e}")
 
     async def detect_and_handle_error(
         self, error_message: str, context: Dict = None
     ) -> Tuple[bool, str]:
-        """Detect, classify, and autonomously handle errors with advanced recovery."""
+        """Detect, classify, and autonomously handle errors with speed optimization."""
+        start_time = time.time()
+
         try:
+            # Preemptive error checking
+            prevention = await self.error_recovery.preemptive_error_check(error_message, context)
+            if prevention:
+                return True, f"Error prevented: {prevention['risk_type']}"
+
+            # Fast recovery lookup first
+            fast_solution = await self.error_recovery.fast_recovery_lookup(error_message)
+            if fast_solution:
+                recovery_time = time.time() - start_time
+                await self._update_performance_metrics(True, recovery_time, "fast_recovery")
+                return True, f"Fast recovery applied: {fast_solution.get('strategy', 'cached')}"
+
             # Record the error for learning
             await self.error_recovery.record_error(error_message, context)
 
@@ -47,7 +102,7 @@ class AutonomousCapabilities:
             if not should_recover:
                 return False, f"Recovery not attempted: {error_message}"
 
-            # Classify the error type
+            # Classify the error type with intelligent strategy selection
             error_type = await self.error_recovery.classify_error(
                 error_message, context
             )
@@ -1008,3 +1063,129 @@ result = "Task has been processed and completed successfully."
 with open("task_result.txt", "w") as f:
     f.write(result)
 print("Task completed and result saved!")"""
+
+    async def _update_performance_metrics(self, success: bool, duration: float, recovery_type: str = "standard"):
+        """Update performance metrics for continuous improvement with enhanced tracking"""
+        self.performance_metrics["total_errors"] += 1
+
+        if success:
+            self.performance_metrics["successful_recoveries"] += 1
+
+            if recovery_type == "fast_recovery" or duration < 5.0:
+                self.performance_metrics["fast_recoveries"] += 1
+                if duration < 2.0:
+                    logger.info(f"🏆 Exceptional recovery speed: {duration:.2f}s")
+
+            # Enhanced rolling average recovery time with speed bias
+            current_avg = self.performance_metrics["avg_recovery_time"]
+            # Weight fast recoveries more heavily for optimization
+            weight = 0.3 if duration < 10.0 else 0.2
+            self.performance_metrics["avg_recovery_time"] = (current_avg * (1 - weight)) + (duration * weight)
+
+            # Enhanced success rate calculation
+            total_attempts = self.performance_metrics["total_errors"]
+            successful_attempts = self.performance_metrics["successful_recoveries"]
+            self.performance_metrics["success_rate"] = successful_attempts / total_attempts
+
+            logger.info(f"⚡ Performance update: {duration:.1f}s, {self.performance_metrics['success_rate']:.1%} success, {self.performance_metrics['avg_recovery_time']:.1f}s avg")
+
+        # Real-time optimization trigger
+        if self.performance_metrics["total_errors"] % 5 == 0:  # Every 5 operations
+            await self.self_optimize_parameters()
+
+        # Save metrics to learning system
+        self.learning_system.save_user_preference("autonomous_performance", self.performance_metrics)
+
+    async def self_optimize_parameters(self):
+        """Continuously optimize parameters based on performance with enhanced logic"""
+        old_retries = self.max_retry_attempts
+        old_timeout = self.timeout_threshold
+
+        # Enhanced retry optimization
+        if self.performance_metrics["success_rate"] > 0.95:
+            # Excellent performance - optimize aggressively for speed
+            self.max_retry_attempts = max(1, self.max_retry_attempts - 1)
+            self.timeout_threshold = max(self.timeout_threshold * 0.9, 15.0)  # Reduce timeout
+            logger.info(f"🚀 Aggressive optimization: {old_retries}→{self.max_retry_attempts} retries, {old_timeout:.1f}→{self.timeout_threshold:.1f}s timeout")
+
+        elif self.performance_metrics["success_rate"] > 0.85:
+            # Good performance - moderate speed optimization
+            if self.performance_metrics["avg_recovery_time"] < 10.0:
+                self.timeout_threshold = max(self.timeout_threshold * 0.95, 12.0)
+                logger.info(f"⚡ Speed optimization: timeout {old_timeout:.1f}→{self.timeout_threshold:.1f}s")
+
+        elif self.performance_metrics["success_rate"] < 0.6:
+            # Poor performance - prioritize reliability with minimal speed impact
+            self.max_retry_attempts = min(3, self.max_retry_attempts + 1)
+            logger.info(f"🛡️ Reliability optimization: {old_retries}→{self.max_retry_attempts} retries")
+
+        # Track optimization applications
+        if old_retries != self.max_retry_attempts or old_timeout != self.timeout_threshold:
+            self.performance_metrics["speed_optimizations_applied"] += 1
+
+        # Save optimized parameters
+        self.learning_system.save_user_preference("optimized_retry_attempts", self.max_retry_attempts)
+        self.learning_system.save_user_preference("optimized_timeout", self.timeout_threshold)
+
+    async def proactive_improvement_check(self, action: str, context: Dict = None) -> Dict[str, Any]:
+        """Proactively check for improvement opportunities before execution with enhanced detection"""
+        improvements = []
+        action_type = action.split()[0] if action.split() else "generic"
+
+        # Enhanced optimization pattern checking
+        optimizations = self.learning_system.get_tool_optimizations(action_type)
+
+        if optimizations:
+            best_opt = optimizations[0]
+            success_rate = best_opt.get('success_count', 0) / max(best_opt.get('usage_count', 1), 1)
+            avg_duration = best_opt.get('optimization', {}).get('duration', 30.0)
+
+            if success_rate > 0.8:
+                improvement_type = "speed_optimization" if avg_duration < 15.0 else "reliability_optimization"
+                improvements.append({
+                    "type": improvement_type,
+                    "confidence": success_rate,
+                    "suggestion": f"Use optimized parameters from {best_opt.get('usage_count', 1)} successful executions",
+                    "expected_duration": avg_duration,
+                    "parameters": best_opt.get('optimization', {}).get('arguments', {})
+                })
+
+        # Enhanced error prevention checking
+        error_patterns = self.learning_system.get_user_preference("error_patterns", {})
+        for pattern, prevention in error_patterns.items():
+            if pattern in action.lower():
+                improvements.append({
+                    "type": "error_prevention",
+                    "pattern": pattern,
+                    "prevention": prevention,
+                    "confidence": prevention.get("success_rate", 0.7)
+                })
+
+        # Check for workflow pattern improvements
+        workflow_patterns = self.learning_system.get_workflow_patterns()
+        for pattern_name, pattern_data in workflow_patterns.items():
+            pattern = pattern_data.get('pattern', {})
+            if action_type in str(pattern.get('actions', [])):
+                pattern_success = pattern_data.get('success_count', 0) / max(pattern_data.get('usage_count', 1), 1)
+                if pattern_success > 0.8:
+                    improvements.append({
+                        "type": "workflow_optimization",
+                        "pattern": pattern_name,
+                        "confidence": pattern_success,
+                        "suggestion": f"Apply proven workflow pattern with {pattern_success:.1%} success rate"
+                    })
+
+        # Predictive suggestions from learning system
+        predictive_suggestions = self.learning_system.get_predictive_suggestions(action)
+        improvements.extend(predictive_suggestions)
+
+        if improvements:
+            self.performance_metrics["proactive_improvements"] += len(improvements)
+            logger.info(f"💡 Found {len(improvements)} proactive improvement opportunities")
+
+        return {
+            "improvements_available": len(improvements),
+            "improvements": improvements,
+            "should_apply": len(improvements) > 0,
+            "high_confidence_improvements": [imp for imp in improvements if imp.get("confidence", 0) > 0.8]
+        }

@@ -7,6 +7,8 @@ import asyncio
 import json
 import re
 import traceback
+from collections import deque
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -43,17 +45,36 @@ class RecoveryStrategy(Enum):
     SKIP_AND_CONTINUE = "skip_and_continue"
     ABORT_GRACEFULLY = "abort_gracefully"
     APPLY_STRING_SAFETY = "apply_string_safety"  # New strategy for dict.lower() errors
+    PREEMPTIVE_OPTIMIZATION = "preemptive_optimization"  # Prevent errors before they occur
+    SPEED_RECOVERY = "speed_recovery"  # Fast recovery for known issues
+    ADAPTIVE_LEARNING = "adaptive_learning"  # Learn and adapt from patterns
 
 
 class EnhancedErrorRecovery:
-    """Advanced error detection, classification, and autonomous recovery system."""
+    """Advanced error detection, classification, and autonomous recovery system with speed optimization."""
 
     def __init__(self):
         self.error_history: List[Dict] = []
         self.recovery_attempts: Dict[str, int] = {}
-        self.max_recovery_attempts = 3
+        self.max_recovery_attempts = 2  # Keep fast recovery
         self.error_patterns = self._initialize_error_patterns()
         self.recovery_strategies = self._initialize_recovery_strategies()
+
+        # Enhanced speed and learning optimization
+        self.fast_recovery_cache: Dict[str, Dict] = {}
+        self.success_rates: Dict[str, float] = {}
+        self.recovery_times: Dict[str, float] = {}
+        self.preemptive_patterns: Dict[str, Dict] = {}  # New: Learn patterns to prevent errors
+        self.recovery_performance_tracker = deque(maxlen=100)  # Track recovery performance
+
+        # Speed optimization settings
+        self.fast_recovery_threshold = 3.0  # Recoveries under 3s are considered fast
+        self.preemptive_confidence_threshold = 0.8  # High confidence for preemptive actions
+
+        # Load previous learning data
+        from app.agent_learning import agent_learning
+        self.learning_system = agent_learning
+        self._load_learned_optimizations()
 
     def _initialize_error_patterns(self) -> Dict[ErrorType, List[str]]:
         """Initialize patterns for error classification."""
@@ -164,18 +185,18 @@ class EnhancedErrorRecovery:
         """Map error types to appropriate recovery strategies."""
         return {
             ErrorType.TOOL_CALL_FORMAT: RecoveryStrategy.FIX_CODE,
-            ErrorType.LLM_OUTPUT_INVALID: RecoveryStrategy.RETRY_WITH_DELAY,
+            ErrorType.LLM_OUTPUT_INVALID: RecoveryStrategy.SPEED_RECOVERY,  # Use faster strategy
             ErrorType.CODE_EXECUTION: RecoveryStrategy.FIX_CODE,
             ErrorType.DEPENDENCY_MISSING: RecoveryStrategy.FALLBACK_APPROACH,
             ErrorType.PATH_ISSUE: RecoveryStrategy.FIX_CODE,
-            ErrorType.NETWORK_ERROR: RecoveryStrategy.RETRY_WITH_DELAY,
-            ErrorType.TIMEOUT: RecoveryStrategy.RETRY_WITH_DELAY,
+            ErrorType.NETWORK_ERROR: RecoveryStrategy.SPEED_RECOVERY,  # Fast retry for network
+            ErrorType.TIMEOUT: RecoveryStrategy.SPEED_RECOVERY,  # Quick timeout adjustment
             ErrorType.MEMORY_LIMIT: RecoveryStrategy.SIMPLIFY_TASK,
             ErrorType.PERMISSION_DENIED: RecoveryStrategy.FALLBACK_APPROACH,
             ErrorType.TASK_COMPLEXITY: RecoveryStrategy.BREAK_DOWN_TASK,
             ErrorType.INFINITE_LOOP: RecoveryStrategy.SIMPLIFY_TASK,
             ErrorType.DICT_LOWER_ERROR: RecoveryStrategy.APPLY_STRING_SAFETY,
-            ErrorType.UNKNOWN: RecoveryStrategy.RETRY_WITH_DELAY,
+            ErrorType.UNKNOWN: RecoveryStrategy.ADAPTIVE_LEARNING,  # Learn from unknown errors
         }
 
     async def classify_error(
@@ -582,3 +603,186 @@ class EnhancedErrorRecovery:
             steps.append("Fix thinking engine to use safe string operations")
 
         return steps
+
+    def _load_learned_optimizations(self):
+        """Load previously learned recovery optimizations for faster response with enhanced capabilities"""
+        try:
+            # Load fast recovery strategies
+            fast_recoveries = self.learning_system.get_user_preference("fast_recovery_cache", {})
+            self.fast_recovery_cache.update(fast_recoveries)
+
+            # Load success rates for different strategies
+            success_data = self.learning_system.get_user_preference("recovery_success_rates", {})
+            self.success_rates.update(success_data)
+
+            # Load preemptive patterns for error prevention
+            preemptive_data = self.learning_system.get_user_preference("preemptive_patterns", {})
+            self.preemptive_patterns.update(preemptive_data)
+
+            # Load recovery performance history
+            perf_history = self.learning_system.get_user_preference("recovery_performance", [])
+            self.recovery_performance_tracker.extend(perf_history[-50:])  # Last 50 entries
+
+            logger.info(f"🚀 Enhanced recovery system loaded: {len(self.fast_recovery_cache)} fast patterns, {len(self.preemptive_patterns)} prevention patterns")
+
+        except Exception as e:
+            logger.warning(f"Could not load recovery optimizations: {e}")
+
+    async def preemptive_error_check(self, action: str, context: Dict = None) -> Optional[Dict]:
+        """Check for potential errors before execution and prevent them with enhanced detection"""
+        action_lower = action.lower() if action else ""
+
+        # Enhanced risk indicators with more patterns
+        risk_indicators = [
+            ("dict.*lower", "string_safety_risk"),
+            ("timeout.*network", "network_risk"),
+            ("javascript.*extract", "extraction_risk"),
+            ("complex.*code", "complexity_risk"),
+            ("path.*error", "path_risk"),
+            ("memory.*limit", "memory_risk"),
+            ("permission.*denied", "permission_risk"),
+            ("import.*error", "dependency_risk")
+        ]
+
+        for pattern, risk_type in risk_indicators:
+            import re
+            if re.search(pattern, action_lower):
+                # Check if we have learned prevention for this
+                prevention_key = f"prevent_{risk_type}"
+                prevention = self.learning_system.get_error_solution(prevention_key)
+
+                if prevention:
+                    success_rate = prevention.get("solution", {}).get("success_rate", 0.5)
+                    if success_rate > self.preemptive_confidence_threshold:
+                        logger.info(f"🛡️ High-confidence preemptive protection: {risk_type} (success: {success_rate:.1%})")
+                        return {
+                            "prevention_applied": True,
+                            "risk_type": risk_type,
+                            "strategy": prevention.get("solution", {}).get("prevention_method", "generic"),
+                            "confidence": success_rate
+                        }
+
+        # Check learned preemptive patterns
+        for pattern_key, pattern_data in self.preemptive_patterns.items():
+            if pattern_data.get("trigger_pattern", "") in action_lower:
+                confidence = pattern_data.get("success_rate", 0.0)
+                if confidence > self.preemptive_confidence_threshold:
+                    logger.info(f"💡 Preemptive pattern match: {pattern_key} (confidence: {confidence:.1%})")
+                    return {
+                        "prevention_applied": True,
+                        "pattern": pattern_key,
+                        "strategy": pattern_data.get("prevention_strategy", "generic"),
+                        "confidence": confidence
+                    }
+
+        return None
+
+    async def fast_recovery_lookup(self, error_message: str) -> Optional[Dict]:
+        """Instant recovery for known errors using cached solutions with enhanced matching"""
+        error_key = self._generate_error_key(error_message)
+
+        # Enhanced fast recovery cache check
+        if error_key in self.fast_recovery_cache:
+            cached_solution = self.fast_recovery_cache[error_key]
+
+            # Verify this solution has good success rate and is still recent
+            success_rate = self.success_rates.get(error_key, 0.0)
+            cache_age_hours = (datetime.now() - datetime.fromisoformat(cached_solution.get("cached_at", datetime.now().isoformat()))).total_seconds() / 3600
+
+            if success_rate > 0.7 and cache_age_hours < 168:  # 1 week freshness
+                logger.info(f"⚡ Fast recovery cache hit: {error_key[:30]}... (success: {success_rate:.1%}, age: {cache_age_hours:.1f}h)")
+                return cached_solution
+
+        # Enhanced semantic matching for similar errors
+        for cached_key, cached_solution in self.fast_recovery_cache.items():
+            if self._calculate_error_similarity(error_message, cached_key) > 0.8:
+                success_rate = self.success_rates.get(cached_key, 0.0)
+                if success_rate > 0.6:  # Lower threshold for similar errors
+                    logger.info(f"🔧 Similar error recovery: {cached_key[:30]}... (similarity match, success: {success_rate:.1%})")
+                    return cached_solution
+
+        # Check learning system for stored solutions with enhanced scoring
+        stored_solution = self.learning_system.get_error_solution(error_key)
+        if stored_solution and stored_solution.get("success_count", 0) > 1:  # Lower threshold
+            confidence = stored_solution.get("success_count", 0) / max(stored_solution.get("usage_count", 1), 1)
+            if confidence > 0.5:  # More permissive for learning
+                logger.info(f"🧠 Learned solution applied: {error_key[:30]}... (confidence: {confidence:.1%})")
+                return stored_solution
+
+        return None
+
+    def _calculate_error_similarity(self, error1: str, error2: str) -> float:
+        """Calculate similarity between error messages for enhanced matching"""
+        import difflib
+        return difflib.SequenceMatcher(None, error1.lower(), error2.lower()).ratio()
+
+    async def update_recovery_performance(self, error_key: str, strategy: str, success: bool, duration: float):
+        """Update performance metrics for recovery strategies with enhanced tracking"""
+        # Enhanced success rate tracking
+        current_attempts = self.success_rates.get(f"{error_key}_attempts", 0) + 1
+        current_successes = self.success_rates.get(f"{error_key}_successes", 0)
+
+        if success:
+            current_successes += 1
+
+            # Enhanced fast recovery caching with more data
+            if duration < self.fast_recovery_threshold:
+                self.fast_recovery_cache[error_key] = {
+                    "strategy": strategy,
+                    "duration": duration,
+                    "success_rate": current_successes / current_attempts,
+                    "cached_at": datetime.now().isoformat(),
+                    "usage_count": current_attempts,
+                    "performance_rating": "excellent" if duration < 1.0 else "very_good" if duration < 2.0 else "good"
+                }
+                logger.info(f"🏆 Excellent recovery cached: {duration:.2f}s for {strategy}")
+
+        # Update success tracking
+        self.success_rates[f"{error_key}_attempts"] = current_attempts
+        self.success_rates[f"{error_key}_successes"] = current_successes
+        self.success_rates[error_key] = current_successes / current_attempts
+
+        # Enhanced performance tracking
+        performance_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "error_key": error_key,
+            "strategy": strategy,
+            "success": success,
+            "duration": duration,
+            "success_rate": current_successes / current_attempts
+        }
+        self.recovery_performance_tracker.append(performance_entry)
+
+        # Save to learning system with enhanced data
+        self.learning_system.save_user_preference("fast_recovery_cache", self.fast_recovery_cache)
+        self.learning_system.save_user_preference("recovery_success_rates", self.success_rates)
+        self.learning_system.save_user_preference("recovery_performance", list(self.recovery_performance_tracker))
+
+        # Learn preemptive patterns from successful recoveries
+        if success and duration < self.fast_recovery_threshold:
+            await self._learn_preemptive_pattern(error_key, strategy, duration)
+
+    async def _learn_preemptive_pattern(self, error_key: str, strategy: str, duration: float):
+        """Learn patterns for preemptive error prevention"""
+        pattern_key = f"preemptive_{error_key[:30]}"
+
+        if pattern_key not in self.preemptive_patterns:
+            self.preemptive_patterns[pattern_key] = {
+                "trigger_pattern": error_key.split("_")[0] if "_" in error_key else error_key[:20],
+                "prevention_strategy": strategy,
+                "success_count": 0,
+                "usage_count": 0,
+                "avg_prevention_time": 0.0
+            }
+
+        pattern = self.preemptive_patterns[pattern_key]
+        pattern["success_count"] += 1
+        pattern["usage_count"] += 1
+        pattern["success_rate"] = pattern["success_count"] / pattern["usage_count"]
+        pattern["avg_prevention_time"] = (pattern.get("avg_prevention_time", 0) * 0.8) + (duration * 0.2)
+
+        # Save preemptive patterns
+        self.learning_system.save_user_preference("preemptive_patterns", self.preemptive_patterns)
+
+        if pattern["success_rate"] > self.preemptive_confidence_threshold:
+            logger.info(f"💡 New preemptive pattern learned: {pattern_key} (success: {pattern['success_rate']:.1%})")
