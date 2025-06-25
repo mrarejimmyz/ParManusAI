@@ -10,6 +10,14 @@ archive/
 backup_legacy_llm/
 chromium/
 
+# Agent Learning System - Personal data and optimizations
+agent_learning/
+*.learning.json
+
+# PDF conversion outputs
+*.pdf
+auto_detect_test*.pdf
+
 # Development and testing files
 test_*.py
 debug_*.py
@@ -28,6 +36,16 @@ critical_*.py
 enhanced_*.py
 force_*.py
 diagnose_*.py
+
+# Learning and demo files
+demo_*.py
+convert_*.py
+*_simple*.py
+*_fixed.py
+*_sim.py
+*_workflow*.py
+*_integration.py
+*_learning*.py
 
 # Development utility scripts (addressing organization issues)
 *_cleanup.py
@@ -66,7 +84,16 @@ run_code_only.py
 *_VERIFICATION*.md
 *_ASSESSMENT*.md
 
-# Project-specific documentation patterns
+# Generated markdown reports and temporary files
+*_analysis.md
+*_report.md
+*_test_report.md
+renewable_energy_test_report.md
+nepal_usa_relations_report.md
+*_complete_analysis.md
+first_generate_a_report_*.md
+
+# Markdown to PDF conversion files
 MISSION_*.md
 REFACTORING_*.md
 MODULARIZATION_*.md

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Set, Union
 
 from pydantic import BaseModel, Field
 
+from app.agent_learning import agent_learning
 from app.config import config
 from app.exceptions import AgentTaskComplete
 from app.llm import LLM
@@ -172,6 +173,9 @@ class BaseAgent(BaseModel, ABC):
             self.state = AgentState.ACTING
             result = await self.act()
 
+            # Learn from the execution result
+            await self._learn_from_execution(result)
+
             # Record step in history
             self.execution_history.append(
                 {
@@ -194,8 +198,71 @@ class BaseAgent(BaseModel, ABC):
             return str(e.message)
         except Exception as e:
             logger.error(f"Error in {self.config.name} step {self.current_step}: {e}")
+
+            # Learn from the error
+            await self._learn_from_error(str(e))
+
             self.state = AgentState.FINISHED
             return f"Error: {str(e)}"
+
+    async def _learn_from_execution(self, result: Any) -> None:
+        """Learn from successful execution results."""
+        try:
+            # Save successful workflow patterns
+            if hasattr(self, 'tool_calls') and self.tool_calls:
+                tools_used = [
+                    tc.get("function", {}).get("name", "unknown")
+                    if isinstance(tc, dict)
+                    else (
+                        getattr(tc, "function", {}).get("name", "unknown")
+                        if hasattr(tc, "function")
+                        else "unknown"
+                    )
+                    for tc in self.tool_calls
+                ]
+
+                if len(tools_used) > 1:
+                    # Multi-tool workflow pattern
+                    pattern_name = f"workflow_{'+'.join(tools_used)}"
+                    pattern = {
+                        "tools": tools_used,
+                        "sequence": [{"tool": tool, "step": i} for i, tool in enumerate(tools_used)],
+                        "context": getattr(self, 'original_user_request', 'unknown'),
+                        "success": True
+                    }
+                    agent_learning.save_workflow_pattern(pattern_name, pattern)
+
+            # Save user preferences based on successful outcomes
+            if hasattr(self, 'original_user_request') and "pdf" in getattr(self, 'original_user_request', '').lower():
+                agent_learning.save_user_preference("prefers_pdf_output", True)
+
+        except Exception as e:
+            logger.warning(f"Error in learning from execution: {e}")
+
+    async def _learn_from_error(self, error_msg: str) -> None:
+        """Learn from errors for future prevention."""
+        try:
+            # Create error signature
+            error_signature = error_msg[:100]  # First 100 chars as signature
+
+            # Check if we have a solution for this error
+            existing_solution = agent_learning.get_error_solution(error_signature)
+            if existing_solution:
+                logger.info(f"🧠 Known error pattern detected, solution available")
+                # Could potentially auto-apply solution here
+
+        except Exception as e:
+            logger.warning(f"Error in learning from error: {e}")
+
+    def get_learned_optimizations(self) -> Dict[str, Any]:
+        """Get all learned optimizations for this agent."""
+        return {
+            "tool_optimizations": agent_learning.tool_optimizations,
+            "workflow_patterns": agent_learning.workflow_patterns,
+            "error_solutions": agent_learning.error_solutions,
+            "user_preferences": agent_learning.user_preferences,
+            "learning_stats": agent_learning.get_learning_stats()
+        }
 
     async def run(self, request: Optional[str] = None) -> str:
         """

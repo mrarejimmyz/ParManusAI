@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from app.agent.autonomous_capabilities import AutonomousCapabilities
 from app.agent.intelligent_tool_filter import IntelligentToolFilter
+from app.agent_learning import agent_learning
 from app.logger import logger
 from app.schema import ToolCall
 
@@ -262,16 +263,19 @@ class ToolManager:
                 # Apply hallucination detection
                 tool_call = await self._apply_hallucination_detection(
                     tool_call
-                )  # Execute the tool
+                )                # Execute the tool
                 result = await self._execute_single_tool(tool_call)
                 results.append(result)
+
+                # Learn from successful tool execution
+                await self._learn_from_tool_execution(tool_call, result)
 
                 # Track results for coordination
                 tool_name = (
                     tool_call.function.name
                     if hasattr(tool_call, "function")
                     else tool_call.get("function", {}).get("name", "")
-                )  # CRITICAL FIX: Update workflow state in thinking engine
+                )# CRITICAL FIX: Update workflow state in thinking engine
                 if hasattr(self.agent, "thinking_engine") and hasattr(
                     self.agent.thinking_engine, "update_workflow_state_from_tool_result"
                 ):
@@ -515,6 +519,62 @@ class ToolManager:
 
         except Exception as e:
             logger.warning(f"⚠️ Post-execution validation warning: {e}")
+
+    async def _learn_from_tool_execution(self, tool_call: Any, result: Any) -> None:
+        """Learn from successful tool execution."""
+        try:
+            tool_name = (
+                tool_call.function.name
+                if hasattr(tool_call, "function")
+                else tool_call.get("function", {}).get("name", "unknown")
+            )
+
+            # Extract tool arguments
+            tool_args = (
+                tool_call.function.arguments
+                if hasattr(tool_call, "function")
+                else tool_call.get("function", {}).get("arguments", {})
+            )
+
+            if isinstance(tool_args, str):
+                import json
+                try:
+                    tool_args = json.loads(tool_args)
+                except:
+                    tool_args = {}
+
+            # Determine if execution was successful
+            success = True
+            if hasattr(result, 'success'):
+                success = result.success
+            elif isinstance(result, dict):
+                success = result.get('success', True)
+            elif isinstance(result, str) and 'error' in result.lower():
+                success = False
+
+            if success:
+                # Save tool optimization patterns
+                optimization = {
+                    "arguments": tool_args,
+                    "result_type": type(result).__name__,
+                    "context": getattr(self.agent, 'original_user_request', 'unknown')[:100]
+                }
+
+                agent_learning.save_tool_optimization(tool_name, optimization)
+
+                # Learn parameter patterns that work well
+                if tool_args:
+                    for param, value in tool_args.items():
+                        if isinstance(value, str) and value in ["auto_detect", "auto_generate"]:
+                            # These are good optimization patterns
+                            pattern_key = f"{tool_name}_{param}_auto_pattern"
+                            agent_learning.save_user_preference(pattern_key, value)
+
+            # Update success rates
+            agent_learning.update_success_rate("tool_optimizations", tool_name, success)
+
+        except Exception as e:
+            logger.warning(f"Error in tool execution learning: {e}")
 
     async def cleanup(self):
         """Clean up tool manager resources."""
