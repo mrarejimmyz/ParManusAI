@@ -52,7 +52,7 @@ class MarkdownToPDFTool(BaseTool):
         """Get tool name for compatibility."""
         return self.config.name
 
-    def _execute(self, markdown_file_path: str, output_path: Optional[str] = None, style: str = "professional") -> ToolResult:
+    async def _execute(self, markdown_file_path: str, output_path: Optional[str] = None, style: str = "professional") -> ToolResult:
         """Execute the markdown to PDF conversion."""
         try:
             # Handle auto-detection of markdown file

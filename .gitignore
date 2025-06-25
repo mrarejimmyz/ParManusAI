@@ -533,3 +533,4 @@ setup_*.py
 *_broken.py.backup
 nodriver_vision_search_fast_broken.py.backup
 
+convert_nepal_usa.py
