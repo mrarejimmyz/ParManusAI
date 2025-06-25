@@ -309,8 +309,30 @@ class ToolManager:
                         ] = True
                         logger.info(
                             "📄 Direct workflow update: report generated"
-                        )  # IMMEDIATE COMPLETION: Stop agent after successful report generation
+                        )                        # Check if we should stop after report generation or continue with additional steps
                         user_request = getattr(self.agent, "original_user_request", "")
+
+                        # Check if PDF conversion is requested
+                        pdf_requested = user_request and any(
+                            keyword in user_request.lower()
+                            for keyword in ["pdf", "convert to pdf", "as pdf", "make pdf", "generate pdf", "export pdf", "save as pdf"]
+                        )
+
+                        # Check if there are pending markdown_to_pdf tool calls
+                        pending_pdf_tools = [
+                            tc for tc in (self.agent.tool_calls or [])
+                            if (
+                                tc.get("function", {}).get("name") == "markdown_to_pdf"
+                                if isinstance(tc, dict)
+                                else (
+                                    getattr(tc, "function", {}).get("name") == "markdown_to_pdf"
+                                    if hasattr(tc, "function")
+                                    else False
+                                )
+                            )
+                        ]
+
+                        # Only complete immediately if no PDF conversion is needed
                         if user_request and any(
                             keyword in user_request.lower()
                             for keyword in [
@@ -328,7 +350,7 @@ class ToolManager:
                                 "trends",
                                 "developments",
                             ]
-                        ):
+                        ) and not pdf_requested and not pending_pdf_tools:
                             logger.info(
                                 "🎉 Research report completed - stopping agent execution"
                             )
@@ -361,6 +383,10 @@ class ToolManager:
                                 )
 
                             raise AgentTaskComplete(completion_message)
+                        elif pdf_requested or pending_pdf_tools:
+                            logger.info(
+                                "📄 Report generated, but PDF conversion requested - continuing execution"
+                            )
 
                 # Collect search and browser data for potential report generation
                 if (

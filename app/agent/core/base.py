@@ -272,7 +272,8 @@ class BaseAgent(BaseModel, ABC):
                         if has_tools:
                             try:
                                 # Import and execute the python tool directly
-                                from app.tool.python_execute import PythonExecute
+                                from app.tool.python_execute import \
+                                    PythonExecute
 
                                 python_tool = PythonExecute()
 
@@ -332,16 +333,37 @@ class BaseAgent(BaseModel, ABC):
             result = await self.step()
             results.append(result)
 
-            # Enhanced completion detection
+            # Enhanced completion detection with PDF awareness
+            pdf_requested = hasattr(self, "original_user_request") and any(
+                keyword in getattr(self, "original_user_request", "").lower()
+                for keyword in ["pdf", "convert to pdf", "as pdf", "make pdf", "generate pdf", "export pdf", "save as pdf"]
+            )
+
+            pending_pdf_tools = self.tool_calls and any(
+                (
+                    tc.get("function", {}).get("name") == "markdown_to_pdf"
+                    if isinstance(tc, dict)
+                    else (
+                        getattr(tc, "function", {}).get("name") == "markdown_to_pdf"
+                        if hasattr(tc, "function")
+                        else False
+                    )
+                )
+                for tc in self.tool_calls
+            )
+
             if result and (
                 "Error:" in str(result)
                 or "finished" in safe_lower(str(result))
-                or "completed successfully" in safe_lower(str(result))
-                or "report generated" in safe_lower(str(result))
+                or ("completed successfully" in safe_lower(str(result)) and not pdf_requested and not pending_pdf_tools)
+                or ("report generated" in safe_lower(str(result)) and not pdf_requested and not pending_pdf_tools)
             ):
                 result_str = str(result)
-                logger.info(f"🎯 Early completion detected: {result_str[:100]}...")
-                break
+                if pdf_requested or pending_pdf_tools:
+                    logger.info(f"🎯 Report completed but PDF conversion pending, continuing...")
+                else:
+                    logger.info(f"🎯 Early completion detected: {result_str[:100]}...")
+                    break
 
         final_result = (
             results[-1] if results else "No steps executed"

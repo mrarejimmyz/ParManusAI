@@ -1,6 +1,8 @@
 """
 Markdown to PDF Conversion Tool for ParManus AI Agent
 """
+import glob
+import os
 import re
 from html import unescape
 from pathlib import Path
@@ -26,13 +28,13 @@ class MarkdownToPDFTool(BaseTool):
                 name="markdown_to_pdf",
                 description="Convert Markdown files to PDF format with professional styling",
                 parameters={
-                    "input_file": {
+                    "markdown_file_path": {
                         "type": "string",
-                        "description": "Path to the input markdown file"
+                        "description": "Path to the input markdown file, or 'auto_detect' to find the most recent markdown file"
                     },
-                    "output_file": {
+                    "output_path": {
                         "type": "string",
-                        "description": "Optional: Path for the output PDF file. If not provided, will use input filename with .pdf extension",
+                        "description": "Optional: Path for the output PDF file. Use 'auto_generate' to create automatic filename",
                         "required": False
                     },
                     "style": {
@@ -50,31 +52,41 @@ class MarkdownToPDFTool(BaseTool):
         """Get tool name for compatibility."""
         return self.config.name
 
-    def _execute(self, input_file: str, output_file: Optional[str] = None, style: str = "professional") -> ToolResult:
+    def _execute(self, markdown_file_path: str, output_path: Optional[str] = None, style: str = "professional") -> ToolResult:
         """Execute the markdown to PDF conversion."""
         try:
+            # Handle auto-detection of markdown file
+            if markdown_file_path == "auto_detect":
+                input_path = self._find_recent_markdown_file()
+                if not input_path:
+                    return ToolResult(
+                        success=False,
+                        error="No recent markdown files found for auto-detection"
+                    )
+            else:
+                input_path = Path(markdown_file_path)
+
             # Validate input file
-            input_path = Path(input_file)
             if not input_path.exists():
                 return ToolResult(
                     success=False,
-                    error=f"Input file not found: {input_file}"
+                    error=f"Input file not found: {input_path}"
                 )
 
             if not input_path.suffix.lower() in ['.md', '.markdown']:
                 return ToolResult(
                     success=False,
-                    error=f"Input file must be a markdown file (.md or .markdown): {input_file}"
+                    error=f"Input file must be a markdown file (.md or .markdown): {input_path}"
                 )
 
             # Set output path
-            if output_file is None:
-                output_path = input_path.with_suffix('.pdf')
+            if output_path is None or output_path == "auto_generate":
+                output_file_path = input_path.with_suffix('.pdf')
             else:
-                output_path = Path(output_file)
+                output_file_path = Path(output_path)
                 # Ensure .pdf extension
-                if output_path.suffix.lower() != '.pdf':
-                    output_path = output_path.with_suffix('.pdf')
+                if output_file_path.suffix.lower() != '.pdf':
+                    output_file_path = output_file_path.with_suffix('.pdf')
 
             # Read markdown content
             with open(input_path, 'r', encoding='utf-8') as f:
@@ -84,16 +96,16 @@ class MarkdownToPDFTool(BaseTool):
             html = markdown.markdown(md_content, extensions=['tables', 'fenced_code', 'nl2br'])
 
             # Convert to PDF
-            result_path = self._create_pdf(html, output_path, style)
+            result_path = self._create_pdf(html, output_file_path, style)
 
             if result_path:
-                file_size = output_path.stat().st_size
+                file_size = output_file_path.stat().st_size
                 return ToolResult(
                     success=True,
-                    result={
+                    content={
                         "message": "Successfully converted markdown to PDF",
                         "input_file": str(input_path),
-                        "output_file": str(output_path),
+                        "output_file": str(output_file_path),
                         "file_size": file_size,
                         "style": style
                     }
@@ -110,12 +122,45 @@ class MarkdownToPDFTool(BaseTool):
                 error=f"Error converting markdown to PDF: {str(e)}"
             )
 
-    def _create_pdf(self, html_content: str, output_path: Path, style: str) -> Optional[str]:
+    def _find_recent_markdown_file(self) -> Optional[Path]:
+        """Find the most recently created markdown file in current directory and subdirectories."""
+        try:
+            # Search patterns for markdown files
+            patterns = ["*.md", "*.markdown"]
+            search_dirs = [".", "outputs", "reports", "generated"]
+
+            all_files = []
+
+            # Search in multiple directories
+            for search_dir in search_dirs:
+                if os.path.exists(search_dir):
+                    for pattern in patterns:
+                        search_path = os.path.join(search_dir, pattern)
+                        files = glob.glob(search_path)
+                        all_files.extend(files)
+
+                        # Also search recursively in subdirs
+                        recursive_path = os.path.join(search_dir, "**", pattern)
+                        files = glob.glob(recursive_path, recursive=True)
+                        all_files.extend(files)
+
+            if not all_files:
+                return None
+
+            # Find most recent file by modification time
+            most_recent = max(all_files, key=os.path.getmtime)
+            return Path(most_recent)
+
+        except Exception as e:
+            print(f"Error finding recent markdown file: {e}")
+            return None
+
+    def _create_pdf(self, html_content: str, output_file_path: Path, style: str) -> Optional[str]:
         """Create PDF from HTML content with specified styling."""
         try:
             # Create PDF document
             doc = SimpleDocTemplate(
-                str(output_path),
+                str(output_file_path),
                 pagesize=A4,
                 rightMargin=72,
                 leftMargin=72,
@@ -273,7 +318,7 @@ class MarkdownToPDFTool(BaseTool):
 
             # Build PDF
             doc.build(story)
-            return str(output_path)
+            return str(output_file_path)
 
         except Exception as e:
             print(f"Error creating PDF: {e}")

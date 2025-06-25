@@ -11,7 +11,8 @@ from app.agent.core.tool_manager import ToolManager
 from app.exceptions import AgentTaskComplete, TokenLimitExceeded
 from app.logger import logger
 from app.schema import Message, ToolCall
-from app.utils.llm_report_generator import LLMReportGenerator, SearchResultFormatter
+from app.utils.llm_report_generator import (LLMReportGenerator,
+                                            SearchResultFormatter)
 
 
 class ThinkingEngine:
@@ -203,8 +204,58 @@ class ThinkingEngine:
             ]
         )
 
+        # Check for PDF conversion requests
+        pdf_requested = any(
+            pattern in all_text.lower()
+            for pattern in [
+                "pdf", "convert to pdf", "as pdf", "make pdf", "generate pdf",
+                "export pdf", "save as pdf", "pdf format", "pdf file"
+            ]
+        )
+
         if is_research_analysis:
             logger.info(f"🔬 Detected research/analysis task pattern")
+
+            # If PDF is requested, ensure we have both report generation and PDF conversion
+            if pdf_requested:
+                logger.info(f"📄 PDF conversion requested for research task")
+
+                # Check if we have report generation tool
+                has_report_tool = tool_calls and any(
+                    "generate_analysis_report" in (
+                        tc.get("function", {}).get("name", "")
+                        if isinstance(tc, dict)
+                        else (
+                            getattr(tc, "function", {}).get("name", "")
+                            if hasattr(tc, "function")
+                            else str(tc).lower()
+                        )
+                    )
+                    for tc in tool_calls
+                )
+
+                # Check if we have PDF tool
+                has_pdf_tool = tool_calls and any(
+                    "markdown_to_pdf" in (
+                        tc.get("function", {}).get("name", "")
+                        if isinstance(tc, dict)
+                        else (
+                            getattr(tc, "function", {}).get("name", "")
+                            if hasattr(tc, "function")
+                            else str(tc).lower()
+                        )
+                    )
+                    for tc in tool_calls
+                )
+
+                # Auto-add missing tools for PDF workflow
+                if has_report_tool and not has_pdf_tool:
+                    logger.info(f"🎯 Auto-adding PDF conversion tool for complete workflow")
+                    await self._add_pdf_conversion_tool()
+                elif not has_report_tool and not has_pdf_tool:
+                    logger.info(f"🎯 Auto-adding both report and PDF tools for complete workflow")
+                    # Will be handled by force report generation logic below
+
             # Check if we have search tool calls that might provide data
             if tool_calls and any(
                 "search"
@@ -446,6 +497,37 @@ class ThinkingEngine:
 
         except Exception as e:
             logger.warning(f"Error forcing report generation: {e}")
+
+    async def _add_pdf_conversion_tool(self):
+        """Automatically add PDF conversion tool when requested."""
+        try:
+            logger.info(f"🎯 Adding PDF conversion tool to workflow")
+
+            # Create PDF conversion tool call
+            pdf_tool_call = {
+                "id": f"pdf_conversion_{int(time.time())}",
+                "type": "function",
+                "function": {
+                    "name": "markdown_to_pdf",
+                    "arguments": json.dumps({
+                        "markdown_file_path": "auto_detect",  # Will be detected from recent files
+                        "output_path": "auto_generate"  # Will generate appropriate name
+                    })
+                }
+            }
+
+            # Add to tool calls if not already present
+            if not any(
+                tc.get("function", {}).get("name") == "markdown_to_pdf"
+                for tc in (self.agent.tool_calls or [])
+            ):
+                if not self.agent.tool_calls:
+                    self.agent.tool_calls = []
+                self.agent.tool_calls.append(pdf_tool_call)
+                logger.info(f"🎯 Added PDF conversion tool call to workflow")
+
+        except Exception as e:
+            logger.warning(f"Error adding PDF conversion tool: {e}")
 
     async def cleanup(self):
         """Clean up thinking engine resources."""
