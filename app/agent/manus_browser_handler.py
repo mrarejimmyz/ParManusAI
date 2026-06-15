@@ -1,4 +1,6 @@
+import json
 import re
+import time
 from typing import Dict, Optional
 
 from app.config import config
@@ -57,21 +59,23 @@ class ManusBrowserHandler:
                 logger.error("No valid plan exists")
                 return None
 
+            if getattr(self.agent, "browser_state", None) is None:
+                self.agent.browser_state = {}
+
+            await self._initialize_browser_state()
+
             # Handle website navigation
-            if step == "Navigate to website" or "navigate" in step.lower():
-                # Check if navigation is already complete
+            if "navigate" in step.lower() or step.lower() == "navigate to website":
                 if self.agent.browser_state.get(
                     "current_url"
                 ) and self.agent.browser_state.get("page_ready"):
                     logger.info("Navigation already completed")
                     return None
 
-                # If we have URL but page isn't ready, wait for readiness
                 if self.agent.browser_state.get("current_url"):
                     logger.debug("URL set but waiting for page readiness")
                     return None
 
-                # Start new navigation
                 user_messages = [
                     msg for msg in self.agent.memory.messages if msg.role == "user"
                 ]
@@ -79,39 +83,14 @@ class ManusBrowserHandler:
                     logger.error("No user request found in memory")
                     return None
 
-                # Extract and clean URL from last message
                 message = user_messages[-1].content
-                url = None
-
-                # Look for common URL patterns
-                url_patterns = [
-                    r'https?://[^\s<>"]+|www\.[^\s<>"]+',  # Standard URLs
-                    r'(?<=review\s)[^\s<>"]+\.[^\s<>"]+',  # URLs after "review"
-                    r'(?<=visit\s)[^\s<>"]+\.[^\s<>"]+',  # URLs after "visit"
-                    r'(?<=open\s)[^\s<>"]+\.[^\s<>"]+',  # URLs after "open"
-                    r'(?<=goto\s)[^\s<>"]+\.[^\s<>"]+',  # URLs after "goto"
-                    r'(?<=navigate to\s)[^\s<>"]+\.[^\s<>"]+',  # URLs after "navigate to"
-                ]
-
-                for pattern in url_patterns:
-                    matches = re.findall(pattern, message, re.IGNORECASE)
-                    if matches:
-                        url = matches[0]
-                        break
-
-                # Fallback to last word if no URL found
-                if not url:
-                    words = message.split()
-                    if words:
-                        last_word = words[-1]
-                        if "." in last_word and "/" in last_word:
-                            url = last_word
-
+                url = self._extract_url_from_request(
+                    step
+                ) or self._extract_url_from_request(message)
                 if not url:
                     logger.warning("No URL found in user request for navigation.")
                     return None
 
-                # Prepend https if missing
                 if not url.startswith("http"):
                     url = "https://" + url
 
@@ -126,14 +105,12 @@ class ManusBrowserHandler:
                     )
                 ]
                 self.agent.browser_state["current_url"] = url
-                self.agent.browser_state["page_ready"] = (
-                    False  # Reset page ready status
-                )
+                self.agent.browser_state["page_ready"] = False
                 self.agent.browser_state["last_action"] = "navigate"
                 return {"tool_code": "browser_use", "args": browser_args}
 
             # Other browser tasks (e.g., content extraction, analysis, screenshot)
-            elif step == "Extract content" or "extract content" in step.lower():
+            elif "extract content" in step.lower() or step.lower() == "extract content":
                 if not self.agent.browser_state.get("content_extracted"):
                     logger.info("Extracting content from current page.")
                     browser_args = {"action": "extract_content"}
@@ -154,7 +131,8 @@ class ManusBrowserHandler:
                     return None
 
             elif (
-                step == "Analyze page structure" or "analyze structure" in step.lower()
+                "analyze structure" in step.lower()
+                or step.lower() == "analyze page structure"
             ):
                 if not self.agent.browser_state.get("structure_analyzed"):
                     logger.info("Analyzing page structure.")
@@ -175,7 +153,7 @@ class ManusBrowserHandler:
                     logger.info("Page structure already analyzed.")
                     return None
 
-            elif step == "Take screenshots" or "take screenshots" in step.lower():
+            elif "screenshot" in step.lower() or "take screenshots" in step.lower():
                 if not self.agent.browser_state.get("screenshots_taken"):
                     logger.info("Taking screenshots.")
                     browser_args = {"action": "screenshot"}
@@ -195,7 +173,10 @@ class ManusBrowserHandler:
                     logger.info("Screenshots already taken.")
                     return None
 
-            elif step == "Summarize content" or "summarize content" in step.lower():
+            elif (
+                "summarize content" in step.lower()
+                or step.lower() == "summarize content"
+            ):
                 if not self.agent.browser_state.get("summary_complete"):
                     logger.info("Summarizing content.")
                     browser_args = {"action": "summarize_content"}

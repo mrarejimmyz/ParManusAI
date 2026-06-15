@@ -77,7 +77,7 @@ class ManusPlanning:
             "task_type": task_type,
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "complexity": context["complexity"],
-            "estimated_duration": "5-10 minutes",  # Add default estimated duration
+            "estimated_duration": TaskAnalyzer.estimate_duration(context),
             "phases": PlanGenerator.create_enhanced_phases(
                 context, optimized_strategy, {}
             ),
