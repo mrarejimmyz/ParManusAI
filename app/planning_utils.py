@@ -38,6 +38,9 @@ Respond with only the task type category (e.g., "report_generation")."""
                 "news_gathering",
                 "website_review",
                 "accident_prevention",
+                "file_operation",
+                "code_task",
+                "general_task",
             }
 
             if task_type in valid_types:
@@ -62,13 +65,13 @@ Respond with only the task type category (e.g., "report_generation")."""
             return "report_generation"
         elif any(x in request_lower for x in ["news", "current", "latest"]):
             return "news_gathering"
-        elif any(x in request_lower for x in ["http", "www", ".com", "website"]):
-            return "website_review"
         elif any(
             x in request_lower
             for x in ["accident", "crash", "collision", "safety", "risk", "prevention"]
         ):
             return "accident_prevention"
+        elif any(x in request_lower for x in ["http", "www", ".com", "website"]):
+            return "website_review"
         elif any(x in request_lower for x in ["file", "read", "write"]):
             return "file_operation"
         elif any(x in request_lower for x in ["code", "program", "script"]):

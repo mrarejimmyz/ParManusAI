@@ -125,11 +125,6 @@ class PlanAnalyzer:
         lower_request = user_request.lower()
         if any(
             word in lower_request
-            for word in ["review", "analyze", ".com", ".org", "website"]
-        ):
-            task_type = "website_review"
-        elif any(
-            word in lower_request
             for word in [
                 "accident",
                 "crash",
@@ -140,6 +135,11 @@ class PlanAnalyzer:
             ]
         ):
             task_type = "accident_prevention"
+        elif any(
+            word in lower_request
+            for word in ["review", "analyze", ".com", ".org", "website"]
+        ):
+            task_type = "website_review"
         elif any(
             word in lower_request for word in ["news", "latest", "current", "today"]
         ):
