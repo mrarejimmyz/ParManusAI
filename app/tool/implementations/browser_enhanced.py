@@ -41,7 +41,7 @@ class EnhancedUnifiedBrowserTool(BaseTool):
     def __init__(self, **kwargs):
         # Set default configuration
         default_config = ToolConfig(
-            name="enhanced_browser",
+            name="browser_use",
             description="Advanced browser automation with stealth mode and anti-bot detection bypass",
             parameters={
                 "type": "object",
@@ -51,9 +51,14 @@ class EnhancedUnifiedBrowserTool(BaseTool):
                         "description": "Action to perform",
                         "enum": [
                             "go_to",
+                            "go_to_url",
                             "navigate",
+                            "initialize",
                             "stealth_scrape",
                             "extract_content",
+                            "analyze_structure",
+                            "summarize_content",
+                            "screenshot",
                             "get_state",
                             "close",
                         ],
@@ -64,7 +69,7 @@ class EnhancedUnifiedBrowserTool(BaseTool):
                     },
                     "goal": {
                         "type": "string",
-                        "description": "Goal for content extraction",
+                        "description": "Goal for content extraction or analysis",
                     },
                     "stealth": {
                         "type": "boolean",
@@ -100,12 +105,18 @@ class EnhancedUnifiedBrowserTool(BaseTool):
 
         try:
             # Route to appropriate handler
-            if action in ["go_to", "navigate"]:
+            if action in ["go_to", "go_to_url", "navigate", "initialize"]:
                 return await self._handle_navigation(kwargs, use_stealth)
             elif action == "stealth_scrape":
                 return await self._handle_stealth_scrape(kwargs)
             elif action == "extract_content":
                 return await self._handle_content_extraction(kwargs, use_stealth)
+            elif action == "analyze_structure":
+                return await self._handle_analyze_structure(kwargs, use_stealth)
+            elif action == "summarize_content":
+                return await self._handle_summarize_content(kwargs, use_stealth)
+            elif action == "screenshot":
+                return await self._handle_screenshot(kwargs)
             elif action == "get_state":
                 return await self._get_browser_state()
             elif action == "close":
@@ -235,6 +246,49 @@ class EnhancedUnifiedBrowserTool(BaseTool):
             },
             metadata={"state_type": "browser"},
         )
+
+    async def _handle_analyze_structure(self, kwargs, use_stealth=True) -> ToolResult:
+        """Analyze page structure and safety content."""
+        url = kwargs.get("url", self.current_url)
+        goal = kwargs.get(
+            "goal",
+            "Analyze the page structure and identify accident prevention and safety guidance content.",
+        )
+        kwargs["url"] = url
+        kwargs["goal"] = goal
+        return await self._handle_content_extraction(kwargs, use_stealth)
+
+    async def _handle_summarize_content(self, kwargs, use_stealth=True) -> ToolResult:
+        """Summarize the page content with a safety focus."""
+        url = kwargs.get("url", self.current_url)
+        goal = kwargs.get(
+            "goal",
+            "Summarize the current page content focusing on accident prevention recommendations and partner safety policies.",
+        )
+        kwargs["url"] = url
+        kwargs["goal"] = goal
+        return await self._handle_content_extraction(kwargs, use_stealth)
+
+    async def _handle_screenshot(self, kwargs) -> ToolResult:
+        """Provide a page snapshot or fallback state when screenshoting is requested."""
+        # If actual screenshot support is unavailable, return state and a warning.
+        state_result = await self._get_browser_state()
+        return ToolResult(
+            success=True,
+            content={
+                "warning": "Screenshot is not supported by the current stealth browser tool.",
+                "state": state_result.data,
+            },
+            metadata={"action": "screenshot_fallback"},
+        )
+
+    async def get_current_state(self) -> ToolResult:
+        """Return the current browser state for compatibility with browser helper classes."""
+        return await self._get_browser_state()
+
+    async def cleanup(self) -> ToolResult:
+        """Cleanup browser resources."""
+        return await self._close_browser()
 
     async def _close_browser(self) -> ToolResult:
         """Close browser and cleanup resources."""

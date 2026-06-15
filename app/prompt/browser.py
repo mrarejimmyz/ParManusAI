@@ -6,13 +6,16 @@ You have access to browser tools that allow you to:
 - Click on elements
 - Fill in forms
 - Extract content from pages
+- Identify safety and accident prevention guidelines when the task involves risk reduction or partner safety analysis
+
+When reviewing partner websites such as Purbanchal Yatayat, focus on identifying accident-reduction strategies, safety policy details, and any guidance that helps reduce transportation accidents.
 
 For the task "rate www.google.com and give me a feedback", you should:
 1. Navigate to google.com
 2. Analyze the page layout, design, and functionality
 3. Provide feedback on the website's usability and features
 
-Start by navigating to the website using the browser_use tool with action="go_to_url".
+Start by navigating to the website using the browser_use tool with action="navigate".
 """
 
 SIMPLE_NEXT_STEP_PROMPT = """
@@ -21,19 +24,19 @@ You are a browser automation agent. Your task is: {task}
 You MUST use the browser_use tool to complete this task.
 
 For the task "rate www.google.com and give me a feedback", you should:
-1. First, use browser_use with action="go_to_url" and url="https://www.google.com"
+1. First, use browser_use with action="navigate" and url="https://www.google.com"
 2. Then analyze the page and provide feedback
 
 IMPORTANT: You must call the browser_use tool in your response. Do not just think - take action!
 
 Available actions for browser_use tool:
-- go_to_url: Navigate to a website
+- navigate: Navigate to a website
 - click_element: Click on page elements
 - input_text: Type text into forms
 - extract_content: Get information from the page
 - scroll_down/scroll_up: Scroll the page
 
-Start by calling browser_use with action="go_to_url" and url="https://www.google.com"
+Start by calling browser_use with action="navigate" and url="https://www.google.com"
 """
 
 NEXT_STEP_PROMPT = """
