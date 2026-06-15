@@ -44,7 +44,7 @@ class PlanAnalyzer:
         Respond with JSON only:
         {{
             "goal": "clear statement of what we're trying to achieve",
-            "task_type": "website_review|news_search|research|analysis|coding|report_generation|general",
+            "task_type": "website_review|news_search|research|analysis|coding|report_generation|accident_prevention|general",
             "complexity": "simple|moderate|complex",
             "estimated_duration": "estimated time to complete",
             "priority": "high|medium|low",
@@ -122,19 +122,29 @@ class PlanAnalyzer:
 
         # Simple analysis based on keywords
         task_type = "general"
+        lower_request = user_request.lower()
         if any(
-            word in user_request.lower()
+            word in lower_request
             for word in ["review", "analyze", ".com", ".org", "website"]
         ):
             task_type = "website_review"
         elif any(
-            word in user_request.lower()
-            for word in ["news", "latest", "current", "today"]
+            word in lower_request
+            for word in [
+                "accident",
+                "crash",
+                "collision",
+                "safety",
+                "risk",
+                "prevention",
+            ]
+        ):
+            task_type = "accident_prevention"
+        elif any(
+            word in lower_request for word in ["news", "latest", "current", "today"]
         ):
             task_type = "news_search"
-        elif any(
-            word in user_request.lower() for word in ["research", "find", "search"]
-        ):
+        elif any(word in lower_request for word in ["research", "find", "search"]):
             task_type = "research"
 
         plan = {

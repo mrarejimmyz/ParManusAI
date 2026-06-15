@@ -1,10 +1,11 @@
-# ParManus AI Agent - LLM-Driven Modular AI System
+# Purwanchal Yatayat Durghatna AI Agent - LLM-Driven Modular AI System
 
 A next-generation AI agent system with LLM-driven reasoning capabilities, featuring modular architecture where every component can intelligently adapt and reason based on prompts.
 
 ## 🚀 Features
 
 ### **Core Capabilities**
+
 - **LLM-Driven Architecture**: Every system component uses LLM reasoning for intelligent decision-making
 - **Modular Design**: Clean separation of concerns with focused, intelligent modules
 - **Local GGUF Models**: Native support for your local Llama 3.2 models
@@ -17,6 +18,7 @@ A next-generation AI agent system with LLM-driven reasoning capabilities, featur
 - **Quality Assurance**: AI-driven code quality analysis and validation
 
 ### **Available Tools & Systems**
+
 - **Browser Automation**: LLM-guided web scraping, form filling, intelligent navigation
 - **File Operations**: AI-enhanced read, write, edit files and documents
 - **Code Execution**: Intelligent Python script execution and debugging
@@ -27,8 +29,39 @@ A next-generation AI agent system with LLM-driven reasoning capabilities, featur
 - **Memory System**: LLM-driven memory pattern recognition and optimization
 - **Quality Assurance**: AI-powered code quality analysis and validation
 - **Visual Search**: Intelligent visual element recognition and interaction
+- **Partner Site Review**: Automatic analysis and summarization of external partner sites like Purwanchal Yatayat
+- **Accident Reduction**: AI-driven risk analysis, preventive guidance, and safety coaching to reduce traffic accidents
+
+## 🤝 Purwanchal Yatayat Collaboration
+
+ParManus AI can now collaborate with the Purwanchal Yatayat accident management website to support accident prevention, claims, documentation, and safe-driving workflows.
+
+- Website: https://purwanchal-yatayat.vercel.app/
+- Company: पूर्वाञ्चल यातायात दुर्घटना नियन्त्रण कम्पनी प्रा.लि.
+- Headquarters: धरान, सुनसरी
+- Established: २०७५ BS
+- Phone: 025-520603, 9852055454
+- Service Area: पूर्वाञ्चल
+
+### Key Site Takeaways
+
+- Accident notification within **24 hours**
+- Clear and complete document collection is required
+- Claims are assessed according to company rules and regulations
+- Service focus on accident management, claim facilitation, risk awareness, and accident reduction
+
+### How ParManus AI Uses This Site
+
+- Review and summarize the partner website's accident claim process
+- Extract official document and eligibility rules
+- Keep accident response workflows aligned with the partner's process
+- Support users in preparing information for claims and reports
+- Provide AI-driven accident prevention recommendations and driver risk awareness based on partner guidelines
+
+See `docs/purwanchal_yatayat_partnership.md` for the full homepage summary.
 
 ### **Agent Types**
+
 - **Manus**: General-purpose AI assistant with all tools and LLM-driven reasoning
 - **Code**: Programming and development specialist with intelligent code analysis
 - **Browser**: Web automation expert with AI-guided navigation strategies
@@ -38,7 +71,9 @@ A next-generation AI agent system with LLM-driven reasoning capabilities, featur
 ## 📋 Prerequisites
 
 ### **For Local Models (Recommended)**
+
 1. **GGUF Models**: Place your models in the `models/` directory
+
    ```
    models/
    ├── Llama-3.2-11B-Vision-Instruct.Q4_K_M.gguf
@@ -50,7 +85,9 @@ A next-generation AI agent system with LLM-driven reasoning capabilities, featur
 2. **GPU Support**: CUDA-compatible GPU (RTX 3070 or better recommended)
 
 ### **For Ollama (Optional Fallback)**
+
 1. Install Ollama:
+
    ```bash
    curl -fsSL https://ollama.ai/install.sh | sh
    ```
@@ -63,17 +100,20 @@ A next-generation AI agent system with LLM-driven reasoning capabilities, featur
 ## 🛠️ Installation
 
 1. **Clone Repository**:
+
    ```bash
    git clone https://github.com/mrarejimmyz/ParManusAI.git
    cd ParManusAI
    ```
 
 2. **Install Dependencies**:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. **Setup Browser (for browser tools)**:
+
    ```bash
    playwright install chromium
    ```
@@ -87,6 +127,7 @@ A next-generation AI agent system with LLM-driven reasoning capabilities, featur
 ## 🎯 Usage
 
 ### **Quick Start**
+
 ```bash
 # Basic usage with local models
 python main.py --prompt "Hello, analyze this code for me"
@@ -105,6 +146,7 @@ python main.py --agent file --prompt "Read and summarize document.txt"
 ```
 
 ### **Advanced Usage**
+
 ```bash
 # Use Ollama instead of local models
 python main.py --api-type ollama --prompt "Help me with this task"
@@ -123,7 +165,9 @@ python main.py --config config/my_config.toml --prompt "Task"
 ```
 
 ### **Interactive Commands**
+
 Once in interactive mode, you can:
+
 - Type any prompt for the AI to process
 - Use `quit`, `exit`, `bye`, or `q` to exit
 - The system automatically routes to appropriate agents
@@ -131,6 +175,7 @@ Once in interactive mode, you can:
 ## ⚙️ Configuration
 
 ### **Intelligent Configuration** (`config/config.toml`)
+
 The system now features LLM-guided configuration optimization:
 
 ```toml
@@ -173,7 +218,9 @@ performance_optimization = true
 ```
 
 ### **Auto-Configuration**
+
 The system can intelligently configure itself:
+
 ```bash
 # Let the LLM analyze your system and optimize settings
 python main.py --auto-configure
@@ -186,6 +233,7 @@ python main.py --optimize-memory
 ```
 
 ### **Environment Variables**
+
 ```bash
 export PARMANUS_WORKSPACE="./workspace"
 export PARMANUS_MODEL_PATH="./models/your-model.gguf"
@@ -195,6 +243,7 @@ export PARMANUS_API_TYPE="local"
 ## 🔧 LLM-Driven Tool System
 
 ### **Intelligent Tool Architecture**
+
 Every tool in ParManus now features LLM-driven reasoning:
 
 1. **BrowserUseTool**: AI-guided web automation with intelligent element detection
@@ -206,6 +255,7 @@ Every tool in ParManus now features LLM-driven reasoning:
 7. **AskHuman**: Intelligent user interaction with context awareness
 
 ### **Modular System Components**
+
 - **GPU Management** (`app/gpu/`): LLM-guided GPU optimization and monitoring
 - **Memory System** (`app/memory/`): AI-driven memory pattern recognition
 - **Search Engine** (`app/search/`): Intelligent multi-engine search coordination
@@ -214,9 +264,13 @@ Every tool in ParManus now features LLM-driven reasoning:
 - **Browser Automation** (`app/tool/browser/`): Intelligent web navigation
 
 ### **Tool Usage Examples**
+
 ```bash
 # AI-guided browser automation
 python main.py --prompt "Intelligently navigate to github.com and find trending Python projects"
+
+# Analyze a partner website like Purwanchal Yatayat
+python main.py --agent browser --prompt "Review the Purwanchal Yatayat site and summarize their accident claim process"
 
 # Smart file operations with analysis
 python main.py --prompt "Analyze this CSV file and create an optimized Python script for processing"
@@ -245,6 +299,7 @@ The system uses LLM-driven analysis to select the optimal agent based on prompt 
 - **Manus (Default)**: General-purpose agent with full LLM reasoning capabilities
 
 The routing system now features:
+
 - **Context Analysis**: Deep understanding of prompt intent
 - **Task Complexity Assessment**: Automatic difficulty evaluation
 - **Tool Requirement Prediction**: Smart pre-loading of needed tools
@@ -253,6 +308,7 @@ The routing system now features:
 ## 🔍 Troubleshooting
 
 ### **Local Model Issues**
+
 ```bash
 # Check if model exists
 ls -la models/
@@ -265,6 +321,7 @@ nvidia-smi
 ```
 
 ### **Ollama Issues**
+
 ```bash
 # Check Ollama status
 ollama list
@@ -277,6 +334,7 @@ curl http://localhost:11434/api/tags
 ```
 
 ### **Tool Issues**
+
 ```bash
 # Install browser dependencies
 playwright install
@@ -286,6 +344,7 @@ python -c "import playwright; print('Playwright available')"
 ```
 
 ### **Common Solutions**
+
 1. **Model not found**: Check `model_path` in config
 2. **GPU memory error**: Reduce `n_gpu_layers` or `gpu_memory_limit`
 3. **Tool errors**: Install missing dependencies
@@ -294,6 +353,7 @@ python -c "import playwright; print('Playwright available')"
 ## 📊 Performance & Intelligence
 
 ### **LLM-Driven Optimizations**
+
 - **GPU Acceleration**: Intelligent CUDA management with LLM-guided optimization
 - **Memory Management**: AI-driven context window handling and pattern recognition
 - **Tool Caching**: Smart tool instance reuse with predictive loading
@@ -302,6 +362,7 @@ python -c "import playwright; print('Playwright available')"
 - **Error Recovery**: AI-powered automatic error detection and resolution
 
 ### **Benchmarks** (RTX 3070, 8GB VRAM)
+
 - **Text Generation**: ~20-30 tokens/second (optimized with LLM reasoning)
 - **Tool Execution**: ~1-3 seconds per tool call (with intelligent caching)
 - **Memory Usage**: ~6-7GB GPU, ~2-4GB RAM (LLM-optimized allocation)
@@ -309,6 +370,7 @@ python -c "import playwright; print('Playwright available')"
 - **Reasoning Overhead**: ~0.1-0.5 seconds per decision (minimal impact)
 
 ### **Intelligence Metrics**
+
 - **Decision Accuracy**: 95%+ correct agent/tool selection
 - **Context Retention**: Advanced memory pattern recognition
 - **Error Prevention**: Proactive issue detection and mitigation
@@ -326,7 +388,9 @@ python -c "import playwright; print('Playwright available')"
 ## 🚀 Advanced Features
 
 ### **LLM-Driven Modular Architecture**
+
 Every component features intelligent reasoning:
+
 ```python
 from app.gpu import GPUManager  # LLM-guided GPU optimization
 from app.memory import EnhancedMemorySystem  # AI-driven memory management
@@ -335,7 +399,9 @@ from app.quality_assurance import QualityAssuranceManager  # AI-powered QA
 ```
 
 ### **Custom Agents**
+
 Create intelligent custom agents with LLM reasoning:
+
 ```python
 from app.agent.base import BaseAgent
 
@@ -350,7 +416,9 @@ class MyIntelligentAgent(BaseAgent):
 ```
 
 ### **Custom Tools**
+
 Add new tools with built-in intelligence:
+
 ```python
 from app.tool.base import BaseTool
 
@@ -365,11 +433,13 @@ class MySmartTool(BaseTool):
 ```
 
 ### **MCP Integration**
+
 Connect to Model Context Protocol servers for extended intelligent capabilities.
 
 ## 📈 Roadmap
 
 ### **LLM-Driven Enhancements**
+
 - [ ] Advanced reasoning chains for complex problem solving
 - [ ] Multi-agent collaboration with intelligent coordination
 - [ ] Predictive user intent analysis and proactive suggestions
@@ -377,6 +447,7 @@ Connect to Model Context Protocol servers for extended intelligent capabilities.
 - [ ] Advanced visual reasoning for complex UI interactions
 
 ### **System Expansions**
+
 - [ ] Additional model format support (ONNX, TensorRT) with LLM optimization
 - [ ] More specialized intelligent agents (data analysis, creative writing, research)
 - [ ] Enhanced multi-modal capabilities with reasoning
@@ -385,6 +456,7 @@ Connect to Model Context Protocol servers for extended intelligent capabilities.
 - [ ] API server mode with intelligent request routing
 
 ### **Architecture Improvements**
+
 - [ ] Distributed reasoning across multiple models
 - [ ] Real-time learning and adaptation
 - [ ] Advanced memory compression with semantic understanding
@@ -414,6 +486,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ParManus now features a fully modular, LLM-driven architecture:
 
 ### **Core Systems**
+
 - **`app/gpu/`**: Intelligent GPU management and optimization
 - **`app/memory/`**: AI-driven memory pattern recognition and management
 - **`app/search/`**: LLM-guided search strategy coordination
@@ -422,9 +495,9 @@ ParManus now features a fully modular, LLM-driven architecture:
 - **`app/reasoning/`**: Advanced AI reasoning and decision-making
 
 ### **Backward Compatibility**
+
 All original interfaces are preserved through intelligent wrapper files that delegate to the new modular systems while adding LLM-driven enhancements.
 
 ---
 
 **Note**: This system represents the next generation of AI agents, where every component can reason, adapt, and improve based on context and user needs. The LLM-driven architecture ensures intelligent behavior at every level while maintaining full local operation and privacy.
-

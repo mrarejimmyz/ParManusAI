@@ -113,6 +113,12 @@ def route_agent(prompt: str, use_full_agents: bool = True) -> str:
             "summary",
             "report",
             "document",
+            "accident",
+            "crash",
+            "collision",
+            "safety",
+            "risk",
+            "prevention",
         ]
     ):
         return "manus"

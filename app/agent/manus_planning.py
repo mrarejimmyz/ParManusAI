@@ -84,8 +84,8 @@ class ManusPlanning:
             "success_criteria": PlanGenerator.define_success_criteria(deep_analysis),
         }
 
-        # Reset browser state for new task
-        if task_type == "website_review":
+        # Reset browser state for new task when web or safety research is involved
+        if task_type in {"website_review", "accident_prevention"}:
             self.agent.browser_state = {
                 "current_url": None,
                 "content_extracted": False,

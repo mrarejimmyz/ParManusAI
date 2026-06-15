@@ -20,6 +20,7 @@ class TaskAnalyzer:
 - report_generation: Creating reports, analyses, detailed documents, investigations
 - news_gathering: Getting current news, latest information, headlines, recent events
 - website_review: Reviewing, analyzing, or checking websites or web content
+- accident_prevention: Accident risk analysis, safety prevention strategies, and safety improvement planning
 - file_operation: File-related tasks like reading, writing, creating, modifying files
 - code_task: Programming, coding, scripting, or development tasks
 - general_task: Any other type of task
@@ -36,9 +37,7 @@ Respond with only the task type category (e.g., "report_generation")."""
                 "report_generation",
                 "news_gathering",
                 "website_review",
-                "file_operation",
-                "code_task",
-                "general_task",
+                "accident_prevention",
             }
 
             if task_type in valid_types:
@@ -65,6 +64,11 @@ Respond with only the task type category (e.g., "report_generation")."""
             return "news_gathering"
         elif any(x in request_lower for x in ["http", "www", ".com", "website"]):
             return "website_review"
+        elif any(
+            x in request_lower
+            for x in ["accident", "crash", "collision", "safety", "risk", "prevention"]
+        ):
+            return "accident_prevention"
         elif any(x in request_lower for x in ["file", "read", "write"]):
             return "file_operation"
         elif any(x in request_lower for x in ["code", "program", "script"]):
@@ -97,6 +101,7 @@ Respond with only the task type category (e.g., "report_generation")."""
         type_multipliers = {
             "news_gathering": 1.3,
             "website_review": 1.2,
+            "accident_prevention": 1.3,
             "file_operation": 0.8,
             "code_task": 1.5,
             "general_task": 1.0,
@@ -234,6 +239,46 @@ class PlanGenerator:
                 },
             ]
 
+        elif task_type == "accident_prevention":
+            return [
+                {
+                    "id": 1,
+                    "title": "Risk Analysis",
+                    "description": "Analyze accident risk factors and partner safety guidelines",
+                    "tools_needed": ["browser_use", "analysis"],
+                    "steps": [
+                        "Review partner accident prevention resources",
+                        "Identify common risk patterns",
+                        "Summarize safety guidance",
+                    ],
+                    "success_criteria": "Risk factors and prevention recommendations identified",
+                },
+                {
+                    "id": 2,
+                    "title": "Prevention Guidance",
+                    "description": "Create actionable accident reduction recommendations",
+                    "tools_needed": ["python_execute", "browser_use"],
+                    "steps": [
+                        "Draft safe driving best practices",
+                        "Recommend documentation and compliance steps",
+                        "Align recommendations with partner rules",
+                    ],
+                    "success_criteria": "Actionable accident prevention guidance created",
+                },
+                {
+                    "id": 3,
+                    "title": "Monitoring & Reporting",
+                    "description": "Prepare a plan for tracking safety outcomes and incident reporting",
+                    "tools_needed": ["python_execute"],
+                    "steps": [
+                        "Define monitoring criteria",
+                        "Create reports for safety improvement",
+                        "Prepare follow-up recommendations",
+                    ],
+                    "success_criteria": "Monitoring plan and safety report prepared",
+                },
+            ]
+
         elif task_type == "file_operation":
             return [
                 {
@@ -291,6 +336,14 @@ class PlanGenerator:
                     "Website content extracted and analyzed",
                     "Screenshots captured",
                     "Analysis report generated",
+                ]
+            )
+        elif task_type == "accident_prevention":
+            base_criteria.extend(
+                [
+                    "Accident risk factors identified",
+                    "Preventive safety recommendations created",
+                    "Partner accident prevention workflow aligned",
                 ]
             )
         elif complexity == "complex":
