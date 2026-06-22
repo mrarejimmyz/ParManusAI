@@ -3,55 +3,55 @@ pydantic~=2.10.6
 
 # For Ollama API (primary and only backend)
 openai~=1.66.3
-httpx>=0.27.0
+httpx>=0.28.1
 
 # Configuration and logging
 tomli>=2.0.0; python_version < "3.11"
 loguru~=0.7.3
 
 # Core ParManus dependencies
-aiofiles>=23.0.0
-beautifulsoup4>=4.12.0
-feedparser>=6.0.10
-requests>=2.31.0
-python-dotenv>=1.0.0
+aiofiles>=25.1.0
+beautifulsoup4>=4.15.0
+feedparser>=6.0.12
+requests>=2.34.2
+python-dotenv>=1.2.2
 
 # Browser automation and stealth browsing
-nodriver>=0.34
-selenium>=4.15.0
-webdriver-manager>=4.0.0
+nodriver>=0.50.3
+selenium>=4.45.0
+webdriver-manager>=4.1.2
 playwright>=1.40.0
 
 # Browser Use (for enhanced browser automation)
 browser-use>=1.0.0
 
 # Docker support (for sandbox/containerized execution)
-docker>=7.0.0
+docker>=7.1.0
 
 # Data processing and parsing
-lxml>=4.9.0
+lxml>=6.1.1
 html5lib>=1.1
 
 # PDF generation
-reportlab>=4.0.0
+reportlab>=5.0.0
 
 # JSON and YAML processing (built-in: json, but for advanced features)
-jsonschema>=4.17.0
+jsonschema>=4.26.0
 
 # Async and file handling
-anyio>=3.6.0
+anyio>=4.14.0
 
 # HTTP client enhancements
-urllib3>=2.0.0
+urllib3>=2.7.0
 
 # Async HTTP operations (required for hallucination detector and web tools)
-aiohttp>=3.8.0
+aiohttp>=3.14.1
 
 # Model Context Protocol support
-mcp>=1.0.0
+mcp>=1.28.0
 
 # WebSocket support for real-time communications
-websockets>=11.0.0
+websockets>=16.0
 
 # Optional: Voice interaction (uncomment if needed)
 # pyttsx3~=2.90
