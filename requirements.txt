@@ -1,8 +1,8 @@
 # ParManus AI dependencies - Complete dependency list
-pydantic~=2.10.6
+pydantic~=2.13.4
 
 # For Ollama API (primary and only backend)
-openai~=1.66.3
+openai~=2.43.0
 httpx>=0.27.0
 
 # Configuration and logging
